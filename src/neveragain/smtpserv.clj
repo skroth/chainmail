@@ -1,9 +1,11 @@
 (ns neveragain.smtpserv
 	(:import (java.net ServerSocket InetAddress)
-			 		 (java.io PrintWriter InputStreamReader BufferedReader)))
+					 (java.util.concurrent Executors)
+					 (java.io PrintWriter InputStreamReader BufferedReader)
+					 (clojure.java.jdbc))
+	(:require (clojure [string :as string]))
+	(:load-file "settings.clj"))
 
-(require '(clojure [string :as string]))
-						
 (defn write-out [out-writer message]
 	(.println out-writer message)
 	(.flush out-writer))
@@ -11,12 +13,19 @@
 (defn get-hostname []
 	(.getHostName (InetAddress/getLocalHost)))
 
-(defn has-account-here [address]
-	(true))
+(defn has-account-here 
+	([address]
+		(has-account-here address db))
+	([address db]
+		(with-connection db
+			(with-query-results rs 
+				(into [] (concat ["SELECT 1 FROM users WHERE address=? AND hostname=?"] 
+					(string/split address #"@")))
+				(boolean rs)))))
 
 (def verb-handler-map {
 	"MAIL" (fn [msg conn session-data]
-		(let [from-matcher (.matcher #"(?i)MAIL FROM:\<(.*)\>" msg)
+		(let [from-matcher (.matcher #"(?i)MAIL FROM:\<(.+@.+\.[a-zA-Z]{2,4})?\>" msg)
 				matches (.matches from-matcher)
 				address (if matches (.group from-matcher 1) nil)]
 			(if-not matches
@@ -28,6 +37,23 @@
 					; set session-data -> envl -> from to the address captured above
 					(assoc session-data :envl (assoc
 						(:envl session-data) :from address))))))
+
+	"RCPT" (fn [msg conn session-data]
+		(let [from-matcher (.matcher #"(?i)RCPT TO:\<(.+@.+\.[a-zA-Z]{2,4})?\>" msg)
+				matches (.matches from-matcher)
+				address (if matches (.group from-matcher 1) nil)]
+			(if-not matches
+				(do
+					(write-out (:out conn) "500 Invalid paramaters for RCPT verb")
+					session-data)
+				(do
+					(if-not (has-account-here address)
+						(do
+							(write-out (:out conn) "550 No such recipient here")
+							session-data)
+						(do
+							(write-out (:out conn) "250 Cool beans")
+							session-data))))))
 
 	"HELO" (fn [msg conn session-data]
 		(write-out (:out conn) 
@@ -76,7 +102,7 @@
 				(if-not (= modified-session-data nil)
 					(recur modified-session-data))))))
 
-(defn serve-forever []
+(defn serve-forever [thread-count]
 	(let [serv-socket (ServerSocket. 25)]
 		(println "Serving on port 25")
 		(while (= 1 1)
@@ -86,4 +112,4 @@
 				(handle-conn {:in in :out out :socket client-socket})
 			))))
 
-(serve-forever)
+(serve-forever 2)
