@@ -23,6 +23,11 @@
 					(string/split address #"@")))
 				(boolean rs)))))
 
+(defn m-branch [[[test branch] & remaining]]
+	(if (do test)
+		(branch)
+		(recur remaining)))
+
 (def verb-handler-map {
 	"MAIL" (fn [msg conn session-data]
 		(let [from-matcher (.matcher #"(?i)MAIL FROM:\<(.+@.+\.[a-zA-Z]{2,4})?\>" msg)
@@ -42,18 +47,18 @@
 		(let [from-matcher (.matcher #"(?i)RCPT TO:\<(.+@.+\.[a-zA-Z]{2,4})?\>" msg)
 				matches (.matches from-matcher)
 				address (if matches (.group from-matcher 1) nil)]
-			(if-not matches
-				(do
+			(m-branch [
+				[(not matches) (fn []
 					(write-out (:out conn) "500 Invalid paramaters for RCPT verb")
-					session-data)
-				(do
-					(if-not (has-account-here address)
-						(do
-							(write-out (:out conn) "550 No such recipient here")
-							session-data)
-						(do
-							(write-out (:out conn) "250 Cool beans")
-							session-data))))))
+					session-data)]
+
+				[(not (has-account-here address)) (fn []
+					(write-out (:out conn) "550 No such recipient here")
+					session-data)]
+
+				[(not false) (fn []
+					(write-out (:out conn) "250 Cool beans")
+					session-data)]])))
 
 	"HELO" (fn [msg conn session-data]
 		(write-out (:out conn) 
@@ -103,7 +108,7 @@
 					(recur modified-session-data))))))
 
 (defn serve-forever [thread-count]
-	(let [serv-socket (ServerSocket. 25)]
+	(let [serv-socket (ServerSocket. 2500)]
 		(println "Serving on port 25")
 		(while (= 1 1)
 			(let [client-socket (.accept serv-socket)
