@@ -13,8 +13,7 @@ CREATE TABLE tags
 
 CREATE TABLE messages 
 (	id INTEGER PRIMARY KEY,
-	to_info TEXT,
-	subject TEXT,
-	body TEXT,
-	recepient_id INTEGER,
-	FOREIGN KEY(recepient_id) REFERENCES users(id));
+	data TEXT,
+	recv_date INTEGER,
+	recipient_id INTEGER,
+	FOREIGN KEY(recipient_id) REFERENCES users(id));
