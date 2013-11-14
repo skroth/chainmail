@@ -9,3 +9,4 @@ pom.xml.asc
 /.nrepl-port
 *.sublime-project
 *.sublime-workspace
+*.db

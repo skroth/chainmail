@@ -7,6 +7,6 @@
   	[org.clojure/clojure "1.5.1"] 
   	[org.clojure/java.jdbc "0.0.6"]
   	[org.xerial/sqlite-jdbc "3.7.2"]]
-  :main ^:skip-aot neveragain.smtpserv
+  :main ^:skip-aot neveragain.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})
