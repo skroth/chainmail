@@ -4,8 +4,9 @@
 		(neveragain 
 			[common :refer :all] 
 			[settings :as settings]
-			rfc))
+			rfc tls))
 	(:import 
+		(javax.net.ssl SSLSocket)
 		(java.net ServerSocket InetAddress)
  		(java.util.concurrent Executors)
 		(java.io PrintWriter InputStreamReader BufferedReader)))
@@ -30,6 +31,7 @@
 
 (def enabled-extensions [
 	neveragain.rfc/extension-description
+	neveragain.tls/extension-description
 ])
 
 (def verb-handler-map (rewrite-ehlo (reduce
@@ -58,11 +60,13 @@
 	; seems to work. Every function is supposed to return envl, and in
 	; this way modify session state. If a handler function retuns nil instead we
 	; take that to mean this sessions has ended.
-	(loop [envl {}]
-		(let [msg (.readLine (:in conn))]
-			(let [modified-envl (respond conn msg envl)]
-				(if-not (= modified-envl nil)
-					(recur modified-envl))))))
+	(loop [envl {} inner-conn conn]
+		(let [msg (.readLine (:in inner-conn))]
+			(let [response (respond inner-conn msg envl)]
+				(cond 
+					(= (type response) SSLSocket) (recur envl response)
+					(= response nil) nil
+					:else (recur response inner-conn))))))
 
 (defn serve-forever [port-number thread-count]
 	(let [serv-socket (ServerSocket. port-number)]
