@@ -4,7 +4,7 @@
 		(neveragain 
 			[common :refer :all] 
 			[settings :as settings]
-			rfc))
+			rfc auth))
 	(:import 
 		(java.net ServerSocket InetAddress)
  		(java.util.concurrent Executors)
@@ -30,6 +30,7 @@
 
 (def enabled-extensions [
 	neveragain.rfc/extension-description
+	neveragain.auth/extension-description
 ])
 
 (def verb-handler-map (rewrite-ehlo (reduce

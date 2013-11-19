@@ -3,6 +3,7 @@ CREATE TABLE users
 	realname TEXT,
 	address TEXT,
 	hostname TEXT,
+	hashword TEXT,
 	UNIQUE (address, hostname) ON CONFLICT ROLLBACK);
 
 CREATE TABLE tags 

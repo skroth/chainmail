@@ -21,7 +21,7 @@
 				matches (.matches from-matcher)
 				address (if matches (.group from-matcher 1) nil)]
 			(cond 
-			(not matches) (do
+				(not matches) (do
 					(write-out (:out conn) "500 invalid paramaters for RCPT verb")
 					envl)
 

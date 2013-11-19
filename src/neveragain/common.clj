@@ -22,6 +22,23 @@
 					(string/split address #"@")))
 				(boolean rs)))))
 
+(defn hash-pass
+	([password]
+		(hash-pass password settings/salt))
+	([password salt]
+		; Literally the worst hashing function ever
+		password))
+
+(defn match-pass 
+	([address password]
+		(match-pass address password settings/db))
+	([address password db]
+		(with-connection db
+			(with-query-results user-data
+					(into [] (concat ["SELECT hashword FROM users WHERE address=? AND hostname=?"] 
+						(string/split address #"@")))
+				(= (hash-pass password) (:hashword (first user-data)))))))
+
 (defn save-raw-message 
 	([message recipient]
 		(save-raw-message message recipient settings/db))

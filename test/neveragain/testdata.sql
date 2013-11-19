@@ -1,2 +1,2 @@
-INSERT INTO users ("realname", "address", "hostname") 
-	VALUES ("Ryan Jenkins", "lanny", "neveraga.in");
+INSERT INTO users ("realname", "address", "hostname", "hashword") 
+	VALUES ("Ryan Jenkins", "lanny", "neveraga.in", "passthesaltpls");
