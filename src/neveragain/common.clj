@@ -3,7 +3,9 @@
 		(clojure [string :as string])
 		(clojure.java [jdbc :refer :all])
 		(neveragain [settings :as settings]))
-	(:import (java.net ServerSocket InetAddress)))
+	(:import 
+		(java.net ServerSocket InetAddress)
+		(org.mindrot.jbcrypt BCrypt)))
 
 (defn write-out [out-writer message]
 	(.println out-writer message)
@@ -22,12 +24,8 @@
 					(string/split address #"@")))
 				(boolean rs)))))
 
-(defn hash-pass
-	([password]
-		(hash-pass password settings/salt))
-	([password salt]
-		; Literally the worst hashing function ever
-		password))
+(defn hash-pass [password]
+	(BCrypt/hashpw password (BCrypt/gensalt settings/salt-factor)))
 
 (defn match-pass 
 	([address password]
@@ -37,7 +35,7 @@
 			(with-query-results user-data
 					(into [] (concat ["SELECT hashword FROM users WHERE address=? AND hostname=?"] 
 						(string/split address #"@")))
-				(= (hash-pass password) (:hashword (first user-data)))))))
+				(BCrypt/checkpw password (:hashword (first user-data)))))))
 
 (defn save-raw-message 
 	([message recipient]

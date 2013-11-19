@@ -7,7 +7,8 @@
   	[org.clojure/clojure "1.5.1"] 
   	[org.clojure/java.jdbc "0.0.6"]
   	[org.xerial/sqlite-jdbc "3.7.2"]
-    [org.clojure/data.codec "0.1.0"]]
+    [org.clojure/data.codec "0.1.0"]
+    [org.mindrot/jbcrypt "0.3m"]]
   :main ^:skip-aot neveragain.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})

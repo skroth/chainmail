@@ -5,13 +5,18 @@
 		[neveragain.common :refer :all]))
 
 (defn string-b64-decode [input-string]
-	(apply str (map char (b64/decode (.getBytes input-string)))))
+	(try 
+		(apply str (map char (b64/decode (.getBytes input-string))))
+		(catch Exception e nil)))
 
 (def auth-methods {
 	"LOGIN" (fn [msg conn envl]
 		(write-out (:out conn) "334 username:")
 		(let [username (string-b64-decode (.readLine (:in conn)))]
 			(cond
+				(= username nil) (do
+					(write-out (:out conn) "500 malformed username, please transmit in b64")
+					envl)
 				(not (has-account-here username)) (do
 					(write-out (:out conn) "500 no such user")
 					envl)
@@ -19,12 +24,15 @@
 					(write-out (:out conn) "334 password:")
 					(let [password (string-b64-decode (.readLine (:in conn)))]
 						(cond
+							(= password nil) (do
+								(write-out (:out conn) "500 malformed password, please transmit in b64")
+								envl)
 							(not (match-pass username password)) (do
-								(write-out (:out conn) "password did not match username")
-								envl))
+								(write-out (:out conn) "500 password did not match username")
+								envl)
 							:else (do
 								(write-out (:out conn) "200 authenticated OK")
-								(assoc envl :authenticated true)))))))
+								(assoc envl :authenticated true))))))))
 })
 
 (defn no-such-method [msg conn envl]
