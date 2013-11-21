@@ -25,7 +25,7 @@
 					(write-out (:out conn) "500 invalid paramaters for RCPT verb")
 					envl)
 
-				(not (has-account-here address)) (do
+				(not (or (has-account-here address) (:authenticated envl))) (do
 					(write-out (:out conn) "550 no such recipient here")
 					envl)
 
@@ -50,7 +50,7 @@
 			:else (do
 				(write-out (:out conn) "354 clear to transmit data")
 				(loop [data ""]
-					(let [line (.readLine (:in conn))]
+					(let [line (.next (:in conn))]
 						(if (= line ".")
 							(do
 								(proc-envelope (assoc envl :data data))
@@ -66,9 +66,8 @@
 		envl)
 
 	"HELO" (fn [msg conn envl]
-		(write-out (:out conn) 
-			(str "250 " (get-hostname)))
-		(assoc envl :who (get (string/split msg #"\s" 1) 1)))
+		(write-out (:out conn) (str "250 " (get-hostname)))
+		envl)
 
 	"QUIT" (fn [msg conn envl]
 		(write-out (:out conn) 

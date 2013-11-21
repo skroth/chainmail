@@ -9,7 +9,8 @@
 		(javax.net.ssl SSLSocket)
 		(java.net ServerSocket InetAddress)
  		(java.util.concurrent Executors)
-		(java.io PrintWriter InputStreamReader BufferedReader)))
+		(java.io PrintWriter)
+		(java.util Scanner NoSuchElementException)))
 
 
 (defn rewrite-ehlo [v-map ext-list]
@@ -47,7 +48,7 @@
 		(string/upper-case (get (string/split msg #"\s") 0))
 		(fn [msg conn envl]
 			; Backup func in case we don't have a handler for this verb
-			(write-out (:out conn) "unknown verb")
+			(write-out (:out conn) "500 unknown verb")
 			 envl)
 	) msg conn envl))
 
@@ -62,20 +63,25 @@
 	; this way modify session state. If a handler function retuns nil instead we
 	; take that to mean this sessions has ended.
 	(loop [envl {} inner-conn conn]
-		(let [msg (.readLine (:in inner-conn))]
-			(let [response (respond inner-conn msg envl)]
-				(cond 
-					(= (type response) SSLSocket) (recur envl response)
-					(= response nil) nil
-					:else (recur response inner-conn))))))
+		(let [msg (try 
+				(.next (:in inner-conn)) ; Could happen if the client closed the connection.
+				(catch NoSuchElementException e nil))]
+			(if (= msg nil)
+				nil
+				(let [response (respond inner-conn msg envl)]
+					(cond 
+						(= (type response) SSLSocket) (recur envl response)
+						(= response nil) nil
+						:else (recur response inner-conn)))))))
 
 (defn serve-forever [port-number thread-count]
 	(let [serv-socket (ServerSocket. port-number)]
 		(println (str "Serving on port " port-number))
 		(while (= 1 1)
 			(let [client-socket (.accept serv-socket)
-	        in (BufferedReader. (InputStreamReader. (.getInputStream client-socket)))
+	        in (Scanner. (.getInputStream client-socket))
 	        out (PrintWriter. (.getOutputStream client-socket))]
+	      (.useDelimiter in #"\r\n")
 				(handle-conn {:in in :out out :socket client-socket})
 			))))
 
