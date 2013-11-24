@@ -51,7 +51,7 @@
 			(write-out (:out conn) "500 unknown verb")
 			 envl)
 	) msg conn envl))
-
+""
 (defn handle-conn [conn]
 	; For the mistified check out the actual spec followed here 
 	; [http://tools.ietf.org/html/rfc2821] and this invaluable guide 
@@ -77,12 +77,10 @@
 (defn serve-forever [port-number thread-count]
 	(let [serv-socket (ServerSocket. port-number)]
 		(println (str "Serving on port " port-number))
+		(println settings/banner)
 		(while (= 1 1)
 			(let [client-socket (.accept serv-socket)
-	        in (Scanner. (.getInputStream client-socket))
-	        out (PrintWriter. (.getOutputStream client-socket))]
-	      (.useDelimiter in #"\r\n")
-				(handle-conn {:in in :out out :socket client-socket})
-			))))
+					conn (make-conn client-socket)]
+				(handle-conn conn)))))
 
 (serve-forever settings/smtp-port settings/thread-count)
