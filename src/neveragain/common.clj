@@ -5,9 +5,10 @@
 		(neveragain [settings :as settings]))
 	(:import 
 		(java.net ServerSocket InetAddress Socket)
-		(java.io PrintWriter InputStreamReader BufferedReader)
-		(java.util Hashtable)
+		(java.io PrintWriter InputStreamReader BufferedReader IOException)
+		(java.util Hashtable Scanner NoSuchElementException)
 		(javax.naming.directory InitialDirContext)
+		(javax.net.ssl SSLSocketFactory)
 		(org.mindrot.jbcrypt BCrypt)))
 
 (defn write-out [out-writer message]
@@ -64,22 +65,42 @@
 			; Now we have a bastardized enumerable, let's make it something less ungodly
 			(loop [hosts []]
 				(if (.hasMore attr)
-					(recur (conj hosts (.next attr)))
-					hosts)))))
+					(recur (conj hosts ; append [priority host] to the hosts vector
+						(string/split 
+							; Pop off the trailing period
+							(string/join "" (butlast (.next attr))) #"\s")))
+					; Sort the list by ascending "distance"
+					(sort-by (fn [x] (Integer. (first x))) hosts))))))
+
+(defn make-conn [s]
+	; Assemble a conn object with wrapped :in and :out streams
+	(let [conn {
+			:in (Scanner. (.getInputStream s))
+	    :out (PrintWriter. (.getOutputStream s))
+	    :socket s}]
+    (.useDelimiter (:in conn) #"\r\n")
+    conn))
+
+(defn negotiate-socket [hostname mandatory-tls]
+	; Try a few socket configurations and return a socket-like object if any
+	; of them are viable. If mandatory-tls is true won't return a non-ssl socket.
+	(try
+		(let [ip-address (InetAddress/getByName hostname)
+				socket (Socket. ip-address 25)]
+			(make-conn socket))
+		(catch IOException e nil)))
 
 (defn relay-message [envl recipient]
 	(let [hostname (get (string/split recipient #"@") 1)
-			ip-address (InetAddress/getByName hostname)
-			socket (Socket. ip-address 25)
-      in (BufferedReader. (InputStreamReader. (.getInputStream socket)))
-      out (PrintWriter. (.getOutputStream socket))
-      conn {:in in :out out :socket socket}]
-	  (println "sup broskiez")
-    (println ip-address)
-    (write-out (:out conn) (str "EHLO " (get-hostname)))
-    (println (.readLine (:in conn)))
-
-	))
+			mx-hosts (get-mx-hosts hostname)]
+		(loop [[[priority host] & remaining] mx-hosts]
+			(println (str "Trying host " host))
+			(let [conn (negotiate-socket host false)]
+				(if-not conn
+					(if (seq remaining) (recur remaining) nil)
+					(do
+						(write-out (:out conn) (str "EHLO " (get-hostname)))
+				    (println (.readLine (:in conn)))))))))
 
 (defn proc-envelope [envl]
 	(dorun (for [recipient (:recipients envl)]
