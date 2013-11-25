@@ -1,3 +1,18 @@
+label {
+	display: block;
+}
 .container {
+	width: 80%;
 	max-width: 900px;
+	position: relative;
+	margin: 0 auto;
+	z-index: 1;
+}
+.input-text {
+	display: block;
+}
+#bg {
+	z-index: -1;
+	position: fixed;
+	top: 0; left: 0;
 }

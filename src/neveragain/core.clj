@@ -51,7 +51,7 @@
 			(write-out (:out conn) "500 unknown verb")
 			 envl)
 	) msg conn envl))
-""
+
 (defn handle-conn [conn]
 	; For the mistified check out the actual spec followed here 
 	; [http://tools.ietf.org/html/rfc2821] and this invaluable guide 
@@ -83,4 +83,4 @@
 					conn (make-conn client-socket)]
 				(handle-conn conn)))))
 
-(serve-forever settings/smtp-port settings/thread-count)
+;(serve-forever settings/smtp-port settings/thread-count)
