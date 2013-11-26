@@ -18,6 +18,16 @@
 (defn get-hostname []
 	(.getHostName (InetAddress/getLocalHost)))
 
+(defn get-user-record
+	([address]
+		(get-user-record address settings/db))
+	([address db]
+		(with-connection db
+			(with-query-results rs 
+				(into [] (concat ["SELECT * FROM users WHERE address=? AND hostname=?"] 
+					(string/split address #"@")))
+				(first rs)))))
+
 (defn has-account-here 
 	([address]
 		(has-account-here address settings/db))
