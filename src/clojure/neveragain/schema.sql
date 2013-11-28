@@ -3,6 +3,7 @@ CREATE TABLE users
 	realname TEXT,
 	address TEXT,
 	hostname TEXT,
+	elgamal_pub_key TEXT,
 	hashword TEXT,
 	UNIQUE (address, hostname) ON CONFLICT ROLLBACK);
 
@@ -17,4 +18,5 @@ CREATE TABLE messages
 	data TEXT,
 	recv_date INTEGER,
 	recipient_id INTEGER,
+	aes_key TEXT,
 	FOREIGN KEY(recipient_id) REFERENCES users(id));

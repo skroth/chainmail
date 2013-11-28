@@ -18,4 +18,4 @@
 			(if-not (BCrypt/checkpw password (:hashword user))
 				"Bad password"
 				(-> (response "You logged in. Much good. Gold star!")
-					(assoc :session (assoc session :authenticated true)))))))
+					(assoc :session (assoc session :user user)))))))

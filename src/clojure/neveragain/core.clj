@@ -12,7 +12,6 @@
 		(java.io PrintWriter)
 		(java.util Scanner NoSuchElementException)))
 
-
 (defn rewrite-ehlo [v-map ext-list]
 	"Returns a verb handler map with an EHLO verb reflecting ext-list"
 	(assoc v-map "EHLO" 
@@ -83,4 +82,5 @@
 					conn (make-conn client-socket)]
 				(handle-conn conn)))))
 
-;(serve-forever settings/smtp-port settings/thread-count)
+(defn -main [& args]
+	(serve-forever settings/smtp-port settings/thread-count))

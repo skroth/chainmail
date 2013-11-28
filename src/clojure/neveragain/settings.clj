@@ -8,6 +8,10 @@
 (def thread-count 2)
 (def smtp-port 2500)
 (def salt-factor 10)
+;; Make sure aes size is lower than ecc size. We don't use any blocking scheme
+;; with the public keys so we have to be able to encrypt the aes keys in one block
+(def default-ecc-key-size 256)
+(def default-aes-key-size 192)
 (def banner "
    ___________     ___________     ___________     ___________     ___________ 
   / _________ \\   / _________ \\   / _________ \\   / _________ \\   / _________ \\

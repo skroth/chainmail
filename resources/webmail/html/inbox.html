@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Chainmail</title>
+		<link rel="stylesheet" type="text/css" href="/css/style.css" />
+		<link rel="stylesheet" type="text/css" href="/css/inbox.css" />
+	</head>
+	<body>
+		<div id="message-list-container">
+			<table>
+				<thead>
+					<tr>
+						<th></th>
+						<th>From</th>
+						<th>Subject</th>
+						<th>Date</th>
+					</tr>
+				</thead>
+				<tbody>
+				</tbody>
+			</table>
+		</div>
+		<script type="text/javascript" src="/js/knockout-3.0.0.js"></script>
+		<script type="text/javascript">
+			function InboxModel() {
+				var self = this
+
+				self.messages = ko.observableArray()
+			}
+
+			ko.applyBindings(new InboxModel())
+		</script>
+	</body>
+</html>
