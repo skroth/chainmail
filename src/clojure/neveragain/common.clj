@@ -9,6 +9,7 @@
 		(org.bouncycastle.jce.provider BouncyCastleProvider JCEElGamalPublicKey)
 		(org.bouncycastle.jce.spec ElGamalParameterSpec ElGamalPublicKeySpec)
 		(org.bouncycastle.util.encoders Hex)
+		(java.lang.String)
 		(java.security KeyPairGenerator SecureRandom Security)
 		(java.io PrintWriter InputStreamReader BufferedReader IOException)
 		(java.util Hashtable Scanner NoSuchElementException)
@@ -27,6 +28,13 @@
 
 (defn get-hostname []
 	(.getHostName (InetAddress/getLocalHost)))
+
+(defn quick-query [db sql]
+	"Convienience function to execute sql and return the result set."
+	(println sql)
+	(with-connection db
+		(with-query-results rs (into [] sql)
+			rs)))
 
 (defn get-user-record
 	([address]
@@ -55,6 +63,8 @@
 	([address password]
 		(match-pass address password settings/db))
 	([address password db]
+		"Returns true if the supplied password matches the stored hashed password
+		for the user with address `address`."
 		(with-connection db
 			(with-query-results user-data
 					(into [] (concat ["SELECT hashword FROM users WHERE address=? AND hostname=?"] 
@@ -65,6 +75,7 @@
 	([]
 		(gen-aes-key settings/default-aes-key-size))
 	([key-size]
+		"Generate a random AES key with a given key length."
 		(let [kg (KeyGenerator/getInstance "AES" "BC")]
 			(.init kg key-size)
 			(.generateKey kg))))
@@ -73,12 +84,14 @@
 	([]
 		(gen-key-pair settings/default-ecc-key-size))
 	([key-length] 
-		"Generate a random ElGamal key pair."
+		"Generate a random ElGamal key pair with a given key length."
 		(let [kpg (KeyPairGenerator/getInstance  "ElGamal" "BC")]
+			(println kpg)
 			(.initialize kpg key-length (SecureRandom.))
 			(.generateKeyPair kpg))))
 
 (defn serialize-pub-key [key]
+	"Encodes a ElGamal public key as base 10 integers in a '/' deliniated string."
 	(let [spec (.getParams key)]
 		(string/join "/" [(.getY key) (.getP spec) (.getG spec)])))
 
@@ -102,6 +115,12 @@
 					(drop block-size remaining))
 				(byte-array (concat cipher-text 
 					(.doFinal cipher (byte-array next-block))))))))
+
+(defn eltest [message]
+	(let [cipher (Cipher/getInstance "ElGamal/None/NoPadding" "BC")
+			pub-key (deserialize-pub-key (:elgamal_pub_key (first (quick-query settings/db ["SELECT * FROM users LIMIT 1;"]))))]
+		(.init cipher Cipher/ENCRYPT_MODE pub-key)
+		(block-proc cipher (.getBytes message "UTF-8"))))
 
 (defn encrypt-message [message pub-key]
 	"Encrypt a message and return the cipher text and an encrypted AES key (the 
@@ -147,11 +166,13 @@
 						[cipher-text enc-key] (encrypt-message message pub-key)]
 					(insert-records "messages" {
 						:recipient_id (:id user)
-						:data cipher-text
-						:aes_key enc-key
+						:data (String. cipher-text "UTF-8")
+						:aes_key (String. enc-key "UTF-8")
 						:recv_date (quot (System/currentTimeMillis) 1000) }))))))
 
 (defn get-mx-hosts [hostname]
+	"Returns a vector containing [priority host] pairs of MX insert-records for a 
+	given FQDN"
 	(let [env (Hashtable.)]
 		(.put env "java.naming.factory.initial" "com.sun.jndi.dns.DnsContextFactory")
 		(let [idcx (InitialDirContext. env)
@@ -169,7 +190,9 @@
 					(sort-by (fn [x] (Integer. (first x))) hosts))))))
 
 (defn make-conn [s]
-	; Assemble a conn object with wrapped :in and :out streams
+	"Takes a socket and returns a map of wrapped input and output streams along
+	with the original socket. This configuration is generally used to represent
+	a foreign connection within this project."
 	(let [conn {
 			:in (Scanner. (.getInputStream s))
 	    :out (PrintWriter. (.getOutputStream s))

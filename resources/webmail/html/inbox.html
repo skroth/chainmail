@@ -16,19 +16,63 @@
 						<th>Date</th>
 					</tr>
 				</thead>
-				<tbody>
+				<tbody data-bind="foreach: messages">
+					<tr>
+						<td></td>
+					</tr>
 				</tbody>
 			</table>
 		</div>
+		<script type="text/javascript" src="/js/zepto.min.js"></script>
 		<script type="text/javascript" src="/js/knockout-3.0.0.js"></script>
+		<script type="text/javascript" src="/js/sjcl.js"></script>
+		<script type="text/javascript" src="/js/sjcl.bn.js"></script>
+		<script type="text/javascript" src="/js/sjcl.ecc.js"></script>
 		<script type="text/javascript">
 			function InboxModel() {
 				var self = this
 
 				self.messages = ko.observableArray()
 			}
+			var viewModel = new InboxModel()
+			ko.applyBindings(viewModel)
 
-			ko.applyBindings(new InboxModel())
+			X = "AICxV/iefCH6D7LCr+iQBIjzrCM2CZcT39VAqCUcJsfg"
+			x = sjcl.bn.fromBits(sjcl.codec.base64.toBits(X))
+			P = "AMP1dAI9SD68MgN50pCx8qtZUYywqflFLCc0jBbR3nZL"
+			p = sjcl.bn.fromBits(sjcl.codec.base64.toBits(P))
+
+			// encmsg is b64.encode(elgamal("oh hai"))
+			encmsg = "gc/sBRtIVPyLytJSfz0xQITrk99cMIfyCiS3BKIXakV5nXGcc8dMMyaOnK9U2lnNJVpbnGf6CVqfatPhQ+Pg3A=="
+
+			function elGamalDecrypt(block, privKey) {
+				// Pretty much a line for line transliteration of BC's ElGamal decrpytion
+				var inBitLength = sjcl.bitArray.bitLength(block),
+					in1 = sjcl.bitArray.bitSlice(block, 0, inBitLength/2),
+					in2 = sjcl.bitArray.bitSlice(block, inBitLength/2, inBitLength),
+					gamma = sjcl.bn.fromBits(in1),
+					phi = sjcl.bn.fromBits(in2),
+					result = gamma.powermod(p.sub(1).sub(x), p).mul(phi).mod(p)
+
+					return result.toBits()
+			}
+
+			console.log(
+				sjcl.codec.utf8String.fromBits(
+					elGamalDecrypt(sjcl.codec.base64.toBits(encmsg), null)))
+
+			/*
+			$.getJSON('/messages', function(data) {
+				for (var i=0; i<data.length; i++) {
+					var message = data[i],
+						encAESKey = sjcl.codec.utf8String.toBits(message.aes_key),
+						data = sjcl.codec.utf8String.toBits(message.data)
+
+					elGamalDecrypt(data, x)
+
+				}
+			})
+			*/
 		</script>
 	</body>
 </html>

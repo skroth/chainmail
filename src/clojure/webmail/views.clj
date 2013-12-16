@@ -2,9 +2,10 @@
   (:use compojure.core
   	ring.util.response)
   (:require 
-		(clojure.java [jdbc :refer :all])
 		(neveragain [common :refer :all])
 		(neveragain [settings :as settings])
+		(clojure.java [jdbc :refer :all])
+		(clojure.data [json :as json])
     [compojure.handler :as handler]
     [compojure.response :as response])
   (:import
@@ -19,3 +20,13 @@
 				"Bad password"
 				(-> (response "You logged in. Much good. Gold star!")
 					(assoc :session (assoc session :user user)))))))
+
+(defn list-messages 
+	([session]
+		(list-messages session settings/db))
+	([session db]
+		(json/write-str 
+			(quick-query db 
+				["SELECT * FROM messages WHERE recipient_id=? ORDER BY recv_date" 
+					(:id (:user session))]))))
+

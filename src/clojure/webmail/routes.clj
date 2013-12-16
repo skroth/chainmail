@@ -8,10 +8,17 @@
     [compojure.handler :as handler]
     [compojure.response :as response]))
 
+(defn login-required [func]
+  (fn [session]
+    (if-not (:user session)
+      {:status 403 :body "403: You must be logged in to view this page"}
+      (func session))))
+
 (defroutes url-routes
   (GET "/" [] "<h1>Hello World!</h1>")
   (GET "/login" {session :session} (if (:authenticated session) "HEY DUDE!!" "NOT HEY!"))
   (POST "/login" {params :params session :session} (views/login params session))
+  (GET "/messages" {session :session} ((login-required views/list-messages) session))
   (route/resources "/css" {:root "webmail/css"})
   (route/resources "/js" {:root "webmail/js"})
   (route/resources "/img" {:root "webmail/img"})

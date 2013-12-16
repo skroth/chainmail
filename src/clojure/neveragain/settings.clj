@@ -5,7 +5,7 @@
 	:subprotocol "sqlite"
 	:subname "neveragain.db"})
 
-(def thread-count 2)
+(def thread-count 1)
 (def smtp-port 2500)
 (def salt-factor 10)
 ;; Make sure aes size is lower than ecc size. We don't use any blocking scheme
