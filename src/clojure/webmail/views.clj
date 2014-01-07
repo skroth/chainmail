@@ -25,8 +25,8 @@
 	([session]
 		(list-messages session settings/db))
 	([session db]
-		(json/write-str 
-			(quick-query db 
-				["SELECT * FROM messages WHERE recipient_id=? ORDER BY recv_date" 
-					(:id (:user session))]))))
-
+		(with-connection db
+			(with-query-results rs ["SELECT * FROM messages WHERE recipient_id=? ORDER BY recv_date" 
+					(:id (:user session))] 
+				(println rs)
+				(json/write-str rs)))))

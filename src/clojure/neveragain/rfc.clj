@@ -53,7 +53,7 @@
 					(let [line (.next (:in conn))]
 						(if (= line ".")
 							(do
-								(proc-envelope (assoc envl :data data))
+								(proc-envelope (assoc envl :data (.trim data)))
 								(write-out (:out conn) "250 message accepted")
 								{})
 							(do
