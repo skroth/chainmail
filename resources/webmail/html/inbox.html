@@ -19,6 +19,7 @@
 				<tbody data-bind="foreach: messages">
 					<tr>
 						<td></td>
+						<td data-bind="text: $data"></td>
 					</tr>
 				</tbody>
 			</table>
@@ -26,15 +27,17 @@
 		<script type="text/javascript" src="/js/zepto.min.js"></script>
 		<script type="text/javascript" src="/js/knockout-3.0.0.js"></script>
 		<script type="text/javascript" src="/js/sjcl.js"></script>
+		<!-- We need the big number library to do our custom ElGamal operation -->
 		<script type="text/javascript" src="/js/sjcl.bn.js"></script>
-		<script type="text/javascript" src="/js/bitArray.js"></script>
-		<script type="text/javascript" src="/js/aes.js"></script>
-		<script type="text/javascript" src="/js/ccm.js"></script>
 		<script type="text/javascript">
 			function InboxModel() {
 				var self = this
 
 				self.messages = ko.observableArray()
+
+				self.addMessage = function(message) {
+					self.messages.unshift(message)
+				}
 			}
 			var viewModel = new InboxModel()
 			ko.applyBindings(viewModel)
@@ -43,9 +46,6 @@
 			x = sjcl.bn.fromBits(sjcl.codec.base64.toBits(X))
 			P = "AMP1dAI9SD68MgN50pCx8qtZUYywqflFLCc0jBbR3nZL"
 			p = sjcl.bn.fromBits(sjcl.codec.base64.toBits(P))
-
-			// encmsg is b64.encode(elgamal("oh hai"))
-			encmsg = "gc/sBRtIVPyLytJSfz0xQITrk99cMIfyCiS3BKIXakV5nXGcc8dMMyaOnK9U2lnNJVpbnGf6CVqfatPhQ+Pg3A=="
 
 			function elGamalDecrypt(block, privKey) {
 				// Pretty much a line for line transliteration of BC's ElGamal decrpytion
@@ -59,73 +59,17 @@
 					return result.toBits()
 			}
 
-			//var ba = elGamalDecrypt(sjcl.codec.base64.toBits(encmsg), null)
-			//console.log(sjcl.bitArray.bitLength(ba))
-			//console.log(sjcl.codec.utf8String.fromBits(ba))
-
-			message = sjcl.codec.utf8String.toBits('oh hai there!!!!')
-			cipher = new sjcl.cipher.aes(
-				sjcl.codec.utf8String.toBits("aaaaaaaaaaaaaaaaaaaaaaaa"))
-			ct = sjcl.codec.base64.fromBits(cipher.encrypt(message))
-			console.log('OUTPUT: ', ct)
-
-
-
 			$.getJSON('/messages', function(data) {
-				gd = data
 				for (var i=0; i<data.length; i++) {
-					var message = data[i]
-
-					var cipherKey = sjcl.codec.base64.toBits(message.aes_key),
-						AESKey = elGamalDecrypt(cipherKey, null)
-
-					console.log('AES key len:', sjcl.bitArray.bitLength(AESKey))
-					console.log('That\'s ', sjcl.codec.base64.fromBits(AESKey), 'in b64')
-					var cipherText = sjcl.codec.base64.toBits(message.data),
-						dataLen = sjcl.bitArray.bitLength(cipherText), 
-						// IV is stored as the first 15 bytes of the ciphertext, and the MAC
-						// is the last 8. Gotta lop those off
-						iv = sjcl.bitArray.bitSlice(cipherText, 0, 13*8),
-						cipherText = sjcl.bitArray.bitSlice(cipherText, 13*8, dataLen)
-
-						console.log('b64 of what we think the ciphertext is is: ', sjcl.codec.base64.fromBits(cipherText))
-
-					console.log(AESKey.length)
-					var cip = new sjcl.cipher.aes(AESKey),
-						result = sjcl.mode.ccm.decrypt(cip, cipherText, iv, [], 64)
-					gcip = cip
+					var message = data[i],
+						cipherKey = sjcl.codec.base64.toBits(message.aes_key),
+						AESKey = elGamalDecrypt(cipherKey, null),
+						cipherText = sjcl.codec.base64.toBits(message.data),
+						iv = sjcl.codec.base64.toBits(message.iv),
+						cipher = new sjcl.cipher.aes(AESKey),
+						result = sjcl.mode.ccm.decrypt(cipher, cipherText, iv, [], 64)
 						
-					console.log('And the results are in: ')
-					console.log(sjcl.codec.utf8String.fromBits(result))
-
-					/*
-					ct = JSON.stringify({
-						'iv': sjcl.codec.base64.fromBits(iv),
-						ct: sjcl.codec.base64.fromBits(cipherText), 
-						ks:192, 
-						ts: 64, 
-						cipher: 'aes',
-						mode: 'ccm',
-						adata:"",
-						v: 1,
-						iter: 1000
-					})
-					console.log(ct)
-					result = sjcl.decrypt(AESKey, ct)
-					*/
-
-						/*
-						aesParams = sjcl.json.defaults
-
-
-					var cip = new sjcl.cipher.aes(AESKey)
-						prp = new sjcl.cipher[aesParams.cipher](AESKey)
-						result = sjcl.mode[aesParams.mode].decrypt(prp, cipherText, iv, null, null)
-						result = sjcl.mode.ccm.n(cip, cipherText, iv, iv, 64)
-						*/
-
-					console.log('herah?')
-					console.log(result)
+					viewModel.addMessage(sjcl.codec.utf8String.fromBits(result))
 				}
 			})
 		</script>

@@ -19,4 +19,5 @@ CREATE TABLE messages
 	recv_date INTEGER,
 	recipient_id INTEGER,
 	aes_key TEXT,
+	iv TEXT,
 	FOREIGN KEY(recipient_id) REFERENCES users(id));

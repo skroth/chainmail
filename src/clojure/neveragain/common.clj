@@ -137,32 +137,24 @@
 (defn encrypt-message [message pub-key]
 	"Encrypt a message and return the cipher text and an encrypted AES key (the 
 	message is encrypted with the AES key, the AES key is encrypted with the 
-	public key)"
+	public key) and the initialization vector used with the AES key."
 	(let [aes-key (gen-aes-key)
 			aes-cipher (CCMBlockCipher. (AESFastEngine.))
 			elgamal-cipher (Cipher/getInstance "ElGamal/None/NoPadding" "BC")
+			iv (random-bytes 13) ; Random 13 byte IV/nonce
 			ccm-params (CCMParameters. 
 				aes-key 
 				64 ; 64 bit tag size, we'll stick with it across the system
-				(random-bytes 13) ; Random 13 byte IV/nonce
+				iv
 				(.getBytes ""))] ; 0 bytes of associated data
-
-		;(println (str "aes key len is " (alength (.getEncoded aes-key)) " bytes"))
-		(println message)
-		(println (seq (.getBytes message "UTF-8")))
-		(println (str "The b64 of the message is " (apply str (map char (b64/encode (.getBytes message "UTF-8"))))))
-		(println (str "aes key in b65 is " (apply str (map char (b64/encode (.getKey aes-key))))))
 
 		(.init aes-cipher true ccm-params)
 		(.init elgamal-cipher Cipher/ENCRYPT_MODE pub-key)
-		(let [cipher-text (bc-block-proc aes-cipher (.getBytes message "UTF-8"))
-				cipher-key (block-proc elgamal-cipher (.getKey aes-key))
-				; store the IV in the first 16 bytes of our ciphertext
-				aug-cipher-text (byte-array (concat (seq (.getNonce ccm-params)) (seq cipher-text)))]
-			(println (str "IV is " (alength (.getNonce ccm-params)) " bytes long"))
-			(println (str "The b64 of the IV is " (apply str (map char (b64/encode (.getNonce ccm-params))))))
-			(println (str "b64 of the ct is " (apply str (map char (b64/encode (byte-array (drop-last 8 (seq cipher-text))))))))
-			[aug-cipher-text cipher-key])))
+		[
+			(bc-block-proc aes-cipher (.getBytes message "UTF-8")) ; Cipher text
+			(block-proc elgamal-cipher (.getKey aes-key)) ; Cipher key
+			iv ; Initialization vector
+		]))
 
 (defn decrypt-message [cipher-text enc-aes-key priv-key]
 	"Decrypt a message and return it as an array of bytes."
@@ -183,8 +175,6 @@
 			(.init aes-cipher false ccm-params)
 			(bc-block-proc aes-cipher actual-cipher-text))))
 
-;(defn sjcl-aes-decrypt [sjcl-json key])
-
 (defn save-raw-message 
 	([message recipient]
 		"Call save-raw-message with the default database"
@@ -198,11 +188,12 @@
 					(string/split recipient #"@")))
 				(let [user (first user-data)
 						pub-key (deserialize-pub-key (:elgamal_pub_key user))
-						[cipher-text enc-key] (encrypt-message message pub-key)]
+						[cipher-text enc-key iv] (encrypt-message message pub-key)]
 					(insert-records "messages" {
 						:recipient_id (:id user)
 						:data (apply str (map char (b64/encode cipher-text)))
 						:aes_key (apply str (map char (b64/encode enc-key)))
+						:iv (apply str (map char (b64/encode iv)))
 						:recv_date (quot (System/currentTimeMillis) 1000) }))))))
 
 (defn get-mx-hosts [hostname]
