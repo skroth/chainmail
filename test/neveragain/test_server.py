@@ -19,7 +19,22 @@ scripts = {
 		'MAIL FROM:<lan.rogers.book@gmail.com>\r\n',
 		'RCPT TO:<lanny@neveraga.in>\r\n',
 		'DATA\r\n',
-		'Hey brah, what\'s up?\r\n.\r\n'
+		''.join([
+			'Message-ID: <52CCFC03.2010102@gmail.com>\r\n',
+			'Date: Tue, 07 Jan 2014 23:19:31 -0800\r\n',
+			'From: Ryan Jenkins <lan.rogers.book@gmail.com>\r\n',
+			'User-Agent: Mozilla/5.0 (Windows NT 6.2; WOW64; rv:24.0) Gecko/20100101 Thunderbird/24.1.0\r\n',
+			'MIME-Version: 1.0\r\n',
+			'To: lanny@neveraga.in\r\n',
+			'Subject: Sup Brah?\r\n',
+			'Content-Type: text/plain; charset=ISO-8859-1; format=flowed\r\n',
+			'Content-Transfer-Encoding: 7bit\r\n',
+			'\r\n',
+			'qwertyuiop\r\n',
+			'\r\n',
+			'loljk\r\n',
+			'\r\n.\r\n'
+		]),
 		'QUIT\r\n'
 	]}
 

@@ -19,7 +19,14 @@
 				<tbody data-bind="foreach: messages">
 					<tr>
 						<td></td>
-						<td data-bind="text: $data"></td>
+						<td>
+							<div class="hoverable">
+								<span data-bind="text: getHumanName(From)"> </span>
+								<span data-bind="text: getEmailAddress(From)" class="hover-show"> </span>
+							</div>
+						</td>
+						<td data-bind="text: Subject"></td>
+						<td data-bind="text: Date"></td>
 					</tr>
 				</tbody>
 			</table>
@@ -59,6 +66,33 @@
 					return result.toBits()
 			}
 
+			function parse2822Message(rawMessage) {
+				/* Takes a raw string representing an email per the RFC 2822 spec
+				and returns a simple, serializable, object containing each header as a
+				propery and message content in a special `body` property */
+				var parsedMessage = {},
+					parts = rawMessage.split('\r\n\r\n')
+
+				if (parts.length < 2) {
+					throw { name: 'ParseError', message: 'Empty body or empty message'}
+				}
+
+				var headers = parts[0].split('\r\n'),
+					body = parts.slice(1).join('\r\n\r\n')
+
+				for (var i=0; i<headers.length; i++) {
+					var parts = headers[i].split(':'),
+						name = parts[0].trim(),
+						value = parts.slice(1).join(':').trim()
+
+					parsedMessage[name] = value
+				}
+
+				parsedMessage.body = body
+
+				return parsedMessage
+			}
+
 			$.getJSON('/messages', function(data) {
 				for (var i=0; i<data.length; i++) {
 					var message = data[i],
@@ -69,9 +103,18 @@
 						cipher = new sjcl.cipher.aes(AESKey),
 						result = sjcl.mode.ccm.decrypt(cipher, cipherText, iv, [], 64)
 						
-					viewModel.addMessage(sjcl.codec.utf8String.fromBits(result))
+					viewModel.addMessage(parse2822Message(
+						sjcl.codec.utf8String.fromBits(result)))
 				}
 			})
+
+			function getHumanName(s) {
+				return s.match(/^(.+?) <.+>$/)[1]
+			}
+
+			function getEmailAddress(s) {
+				return s.match(/^.+ <(.+?)>$/)[1]
+			}
 		</script>
 	</body>
 </html>

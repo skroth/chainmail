@@ -11,6 +11,21 @@ label {
 .input-text {
 	display: block;
 }
+.hoverable {
+	position: relative;
+}
+.hover-show {
+	display: none;
+	position: absolute;
+	top: 100%;
+	background-color: rgba(0, 0, 0, .85);
+	color: white;
+	padding: 2px 5px;
+	z-index: 1;
+}
+.hoverable:hover .hover-show {
+	display: block;
+}
 #bg {
 	z-index: -1;
 	position: fixed;
