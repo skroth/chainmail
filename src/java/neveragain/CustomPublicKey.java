@@ -10,10 +10,10 @@ import org.bouncycastle.jce.spec.ElGamalParameterSpec;
 import org.bouncycastle.jce.interfaces.ElGamalPublicKey;
 
 public class CustomPublicKey implements ElGamalPublicKey, DHPublicKey {
-	private BigInteger y;
-	private ElGamalParameterSpec elSpec;
+  private BigInteger y;
+  private ElGamalParameterSpec elSpec;
 
-	public CustomPublicKey(ElGamalPublicKeySpec spec) {
+  public CustomPublicKey(ElGamalPublicKeySpec spec) {
     this.y = spec.getY();
     this.elSpec = new ElGamalParameterSpec(spec.getParams().getP(), spec.getParams().getG());
   }

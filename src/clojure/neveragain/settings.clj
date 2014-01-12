@@ -1,9 +1,9 @@
 (ns neveragain.settings)
 
 (def db {
-	:classname "org.sqlite.JDBC"
-	:subprotocol "sqlite"
-	:subname "neveragain.db"})
+  :classname "org.sqlite.JDBC"
+  :subprotocol "sqlite"
+  :subname "neveragain.db"})
 
 (def thread-count 1)
 (def smtp-port 2500)

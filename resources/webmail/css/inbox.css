@@ -1,0 +1,61 @@
+#message-list-container,
+#message-pane {
+  box-sizing: border-box;
+  float: left;
+  height: 100%;
+  overflow-y: auto;
+}
+#message-pane {
+  border-left: 1px double black;
+  padding-left: 2em;
+}
+#message-table {
+  width: 100%
+}
+
+#content {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+}
+
+#message-table .active td {
+  background-color: lightgray;
+}
+
+.subject-header {
+  border-bottom: 1px solid gray;
+  padding-bottom: .15em;
+  margin-right: 20px;
+}
+
+.message-body {
+  display: block;
+  font-family: sans-serif;
+}
+
+.message-info {
+  overflow: hidden;
+}
+.message-info span {
+  float: left;
+}
+.info-label {
+  clear: both;
+  margin-right: 1em;
+}
+
+.button {
+  background-color: #EEE;
+  display: inline-block;
+  padding: .1cm .3cm;
+  color: black;
+  border: 1px solid grey;
+  margin: .3em .2em;
+}
+
+.button.primary {
+  background-color: darkblue;
+  color: white;
+}
