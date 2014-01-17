@@ -2,17 +2,21 @@
 <html>
   <head>
     <title>Chainmail</title>
+    <link rel="stylesheet" type="text/css" href="css/normalize.css" />
+    <link rel="stylesheet" type="text/css" href="css/foundation.min.css" />
     <link rel="stylesheet" type="text/css" href="css/style.css" />
     {% block css %}
     {% endblock %}
   </head>
   <body>
-    <div class="container">
+    <div id="content">
     {% block content %}
     {% endblock %}
+    </div>
     
+    <script type="text/javascript" src="/js/jquery.js"></script>
+    <script type="text/javascript" src="/js/foundation.min.js"></script>
     {% block js %}
     {% endblock %}
-    </div>
   </body>
 </html>

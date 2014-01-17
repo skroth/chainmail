@@ -34,7 +34,6 @@
 
 (defn quick-query [db sql]
   "Convienience function to execute sql and return the result set."
-  (println sql)
   (with-connection db
     (with-query-results rs (into [] sql)
       rs)))
@@ -235,16 +234,20 @@
     (catch IOException e nil)))
 
 (defn relay-message [envl]
-  (let [hostname (get (string/split recipient #"@") 1)
-      mx-hosts (get-mx-hosts hostname)]
-    (loop [[[priority host] & remaining] mx-hosts]
-      (println (str "Trying host " host))
-      (let [conn (negotiate-socket host false)]
-        (if-not conn
-          (if (seq remaining) (recur remaining) nil)
-          (do
-            (write-out (:out conn) (str "EHLO " (get-hostname)))
-            (println (.readLine (:in conn)))))))))
+  (loop [[recipient & remaining-recipients] (:recipients envl)]
+    (let [hostname (get (string/split recipient #"@") 1)
+        mx-hosts (get-mx-hosts hostname)]
+      (loop [[[priority host] & remaining] mx-hosts]
+        (println (str "Trying host " host))
+        (let [conn (negotiate-socket host false)]
+          (if-not conn
+            (if (seq remaining) (recur remaining) nil)
+            (do
+              (write-out (:out conn) (str "EHLO " (get-hostname)))
+              (println (.readLine (:in conn))))))))
+    (if (seq remaining-recipients)
+      (recur remaining-recipients)
+      nil)))
 
 (defn proc-envelope [envl]
   (dorun (for [recipient (:recipients envl)]

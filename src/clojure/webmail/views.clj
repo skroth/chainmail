@@ -39,6 +39,7 @@
   ([request db]
     "Generate a new elGamal key pair, store the public material in the database 
     and send the private key to the user."
+    ; THE ABOVE COMMENT IS A LIE!
     (let [key-pair (gen-key-pair)
         pub-key (.getPublic key-pair)
         priv-key (.getPrivate key-pair)]
@@ -62,6 +63,20 @@
     (relay-message envl)
     {:status 200
      :body (json/write-str {:status "success"})}))
+
+(defn orient 
+  ([request]
+    (orient request settings/db))
+  ([request db]
+    "Returns a JSON object letting a web-client user know some things about
+    themself, including what we think their address is and the current state of
+    their settings in our db"
+    (let [user (first (quick-query db ["SELECT * FROM users WHERE id=? LIMIT 1" 
+          (:id (:user (:session request)))]))]
+      (json/write-str {
+        :address (str (:address user) "@" (:hostname user))
+        :realname (:realname user)
+      }))))
 
 (defn index [request]
   (if (:user (:session request)) 

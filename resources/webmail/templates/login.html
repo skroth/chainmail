@@ -1,23 +1,28 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>Login | Chainmail</title>
-    <link rel="stylesheet" type="text/css" href="css/style.css" />
-  </head>
-  <body>
-    <div class="container">
-      <h1>Login</h1>
-      <form action="/login" method="POST">
-        <label>
-          <span class="input-text">Username</span>
-          <input type="email" name="address" />
-        </label>
-        <label>
-          <span class="input-text">Password</span>
-          <input type="password" name="password" />
-        </label>
-        <input type="submit" value="Login" />
-    </div>
-  </body>
-</html>
+{% extends "webmail/templates/base.html" %}
+
+{% block css %}
+<style>
+  #login-container {
+    margin-top: 10%;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="login-container" class="small-12 large-4 large-offset-4 columns panel">
+  <h1>Login</h1>
+
+  <form action="/login" method="POST">
+    <label>
+      <span class="input-text">Username</span>
+      <input type="email" name="address" />
+    </label>
+    <label>
+      <span class="input-text">Password</span>
+      <input type="password" name="password" />
+    </label>
+    <input type="submit" value="Login" />
+  </form>
+</div>
+{% endblock %}
 

@@ -6,11 +6,11 @@
   overflow-y: auto;
 }
 #message-pane {
-  border-left: 1px double black;
-  padding-left: 2em;
+  border-left: 1px solid #ddd;
 }
 #message-table {
-  width: 100%
+  width: 100%;
+  border-width: 1px 0;
 }
 
 #content {
@@ -20,42 +20,33 @@
   position: fixed;
 }
 
-#message-table .active td {
-  background-color: lightgray;
+#no-message {
+  margin: 50% auto;
+  display: block;
+  width: 200px;
+}
+
+.info-line {
+  border-bottom: 1px solid #777;
+  padding: .5em 20px;
 }
 
 .subject-header {
-  border-bottom: 1px solid gray;
-  padding-bottom: .15em;
-  margin-right: 20px;
+  margin-left: 20px;
+  border-bottom: 1px solid #ddd;
+  display: inline-block;
+  padding-right: 1em;
 }
 
 .message-body {
-  display: block;
-  font-family: sans-serif;
+  margin: 20px;
+  font-family: "Helvetica Neue","Helvetica",Helvetica,Arial,sans-serif;
 }
 
-.message-info {
-  overflow: hidden;
-}
-.message-info span {
-  float: left;
-}
-.info-label {
-  clear: both;
-  margin-right: 1em;
+.message-actions {
+  margin-right: 20px;
 }
 
-.button {
-  background-color: #EEE;
-  display: inline-block;
-  padding: .1cm .3cm;
-  color: black;
-  border: 1px solid grey;
-  margin: .3em .2em;
-}
-
-.button.primary {
-  background-color: darkblue;
-  color: white;
+.compose-body {
+  height: 20em;
 }
