@@ -233,21 +233,38 @@
       (make-conn socket))
     (catch IOException e nil)))
 
-(defn relay-message [envl]
-  (loop [[recipient & remaining-recipients] (:recipients envl)]
-    (let [hostname (get (string/split recipient #"@") 1)
-        mx-hosts (get-mx-hosts hostname)]
-      (loop [[[priority host] & remaining] mx-hosts]
-        (println (str "Trying host " host))
-        (let [conn (negotiate-socket host false)]
-          (if-not conn
-            (if (seq remaining) (recur remaining) nil)
-            (do
-              (write-out (:out conn) (str "EHLO " (get-hostname)))
-              (println (.readLine (:in conn))))))))
-    (if (seq remaining-recipients)
-      (recur remaining-recipients)
-      nil)))
+(defn read-smtp-block [conn]
+  "Reads from the connection into a buffer until a terminal line is hit."
+  (loop [line (.next (:in conn)) data ""]
+    (if (re-matches #"^\d{3}-.*" line)
+      (recur (.next (:in conn)) (str data "\r\n" line))
+      (str data "\r\n" line))))
+
+
+(defn relay-message [envl recipient]
+  (let [hostname (get (string/split recipient #"@") 1)
+      mx-hosts (get-mx-hosts hostname)]
+    (loop [[[priority host] & remaining] mx-hosts]
+      (println (str "Trying host " host))
+      (let [conn (negotiate-socket host false)]
+        (println (str "R: " (.next (:in conn))))
+        (if-not conn
+          (if (seq remaining) (recur remaining) nil)
+          (do
+            (write-out (:out conn) (str "EHLO " (get-hostname)))
+            ; Read the EHLO response, don't do anything with it for the moment.
+            (println (read-smtp-block conn))
+            (write-out (:out conn) (str "MAIL FROM:<" (:from envl) ">"))
+            (println (read-smtp-block conn))
+            (write-out (:out conn) (str "RCPT TO:<" recipient ">"))
+            (println (read-smtp-block conn))
+            (write-out (:out conn) "DATA")
+            (println (read-smtp-block conn))
+            (write-out (:out conn) (:data envl))
+            (println (read-smtp-block conn))
+            (println "bug buh why?")
+            (println (:data envl))
+            ))))))
 
 (defn proc-envelope [envl]
   (dorun (for [recipient (:recipients envl)]

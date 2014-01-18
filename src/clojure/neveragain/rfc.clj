@@ -49,16 +49,15 @@
 
       :else (do
         (write-out (:out conn) "354 clear to transmit data")
-        (loop [data ""]
-          (let [line (.next (:in conn))]
-            (if (= line ".")
-              (do
-                (proc-envelope (assoc envl :data (.trim data)))
-                (write-out (:out conn) "250 message accepted")
-                {})
-              (do
-                (recur (str data "\r\n" line)))))))
-    ))
+        (loop [data ""
+            line (.next (:in conn))]
+          (if (= line ".")
+            (do
+              (proc-envelope (assoc envl :data (str data line)))
+              (write-out (:out conn) "250 message accepted")
+              {})
+            (do
+              (recur (str data line "\r\n") (.next (:in conn)))))))))
 
   "EHLO" (fn [msg conn envl]
     (write-out (:out conn) (str "250-" (get-hostname)))

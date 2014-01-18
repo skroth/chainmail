@@ -12,7 +12,23 @@ scripts = {
     'MAIL FROM:<lanny@neveraga.in>\r\n',
     'RCPT TO:<lan.rogers.book@gmail.com>\r\n',
     'DATA\r\n',
-    'Hey brah, what\'s up?\r\n.\r\n'
+    ''.join([
+      'Message-ID: <lol.lol@neveraga.in>\r\n',
+      'Date: Tue, 07 Jan 2014 23:19:31 -0800\r\n',
+      'From: Ryan Jenkins <lanny@neveraga.in>\r\n',
+      'User-Agent: chainmail-test-utility\r\n',
+      'MIME-Version: 1.0\r\n',
+      'To: lan.rogers.book@gmail.com\r\n',
+      'Subject: Can you hear me now?\r\n',
+      'Content-Type: text/plain; charset=ISO-8859-1; format=flowed\r\n',
+      'Content-Transfer-Encoding: 7bit\r\n',
+      '\r\n',
+      'Woot, secuirty. Hellz to teh yeah.\r\n',
+      '\r\n',
+      'Sent from my testscriptPhone.\r\n',
+      '\r\n.\r\n'
+    ]),
+    'QUIT\r\n'
   ], 
   'endpoint_single_user': [
     'EHLO [localhost]\r\n',
