@@ -9,10 +9,12 @@
     {% endblock %}
   </head>
   <body>
+    {% block skipcontent %}
     <div id="content">
     {% block content %}
     {% endblock %}
     </div>
+    {% endblock %}
     
     <script type="text/javascript" src="/js/jquery.js"></script>
     <script type="text/javascript" src="/js/foundation.min.js"></script>

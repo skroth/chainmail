@@ -13,14 +13,21 @@
   (:import
     (org.mindrot.jbcrypt BCrypt)))
 
-(def inboxed-messages-sql "
+(def tagged-messages-sql "
   SELECT messages.*, tags.id AS tag_id FROM tags
   INNER JOIN messages 
     ON messages.id=tags.message_id
   WHERE 
-    tags.name='inbox' AND
+    tags.name=? AND
     tags.owner_id=?
-  ORDER BY messages.recv_date")
+  ORDER BY messages.recv_date
+  LIMIT 50")
+
+(def all-messages-sql "
+  SELECT * FROM messages
+  WHERE recipient_id=?
+  ORDER BY messages.recv_date
+  LIMIT 50")
 
 (defn b-and [a b]
   "A simple macro wrapper so we can use `and` as a first class function"
@@ -141,6 +148,10 @@
 (defn list-messages 
   ([request]
     (list-messages request settings/db))
-  ([request db]
-    (json/write-str (query db [inboxed-messages-sql 
-      (:id (:user (:session request)))]))))
+  ([{{{user-id :id} :user} :session {tag "tag"} :params} db]
+    "Returns json representing upto the last 50 (by reception date) messages
+    sent to the user making the request which have the tag specified in the `tag`
+    get parameter. Special value `*` will return all messages, regardless of tag."
+    (if (= tag "*")
+      (json/write-str (query db [all-messages-sql user-id]))
+      (json/write-str (query db [tagged-messages-sql tag user-id])))))

@@ -16,7 +16,6 @@
 #content {
   width: 100%;
   height: 100%;
-  overflow: hidden;
   position: fixed;
 }
 
@@ -24,6 +23,11 @@
   margin: 50% auto;
   display: block;
   width: 200px;
+}
+
+#inbox-actions {
+  margin-top: 20px;
+  margin-left: 20px;
 }
 
 .info-line {

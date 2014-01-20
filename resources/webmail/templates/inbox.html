@@ -4,95 +4,126 @@
 <link rel="stylesheet" type="text/css" href="/css/inbox.css" />
 {% endblock %}
 
-{% block content %}
-<div id="content">
-  <div id="message-list-container" data-bind="style: { width: listPaneWidth() + '%' }">
-    <div class="button-bar">
-      <ul class="button-group">
-        <li><a class="button small" data-bind="click: composeNew">Compose</a></li>
-      </ul>
+{% block skipcontent %}
+<div class="off-canvas-wrap">
+  <div id="content" class="inner-wrap">
+    <div class="left-off-canvas-menu">
+      <ul class="off-canvas-list">
+        <li><label>Mail</label></li>
+        <li>
+          <a href="#" data-bind="click: function() { $root.activeMessageSet($root.messageSets.inbox) }">
+            Inbox
+          </a>
+        </li>
+        <li>
+          <a href="#" data-bind="click: function() { $root.activeMessageSet($root.messageSets.all) }">
+            All Mail
+          </a>
+        </li>
 
-      <ul class="button-group">
-        <li><a class="button small alert">Archive</a></li>
-        <li><a class="button small alert">Delete</a></li>
+        <li><label>Misc.</label></li>
+        <li><a href="#">Settings</a></li>
+        <li><a href="#">Logout</a></li>
       </ul>
-
     </div>
 
-    <table id="message-table">
-      <thead>
-        <tr>
-          <th></th>
-          <th>From</th>
-          <th>Subject</th>
-          <th>Date</th>
-        </tr>
-      </thead>
-      <tbody data-bind="foreach: messages">
-        <tr data-bind="css: { active: $root.activeMessage() == $data }">
-          <td>
-            <input type="checkbox" />
-          </td>
-          <td>
-            <div>
-              <span class="has-tip"
-                data-tooltip
-                data-bind="text: getHumanName(From),
-                  attr: { title: getEmailAddress(From) }"></span>
-            </div>
-          </td>
-          <td>
-            <a href="#" data-bind="text: Subject, click: $root.setActiveMessage"></a>
-          </td>
-          <td data-bind="text: ftime(Date)"></td>
-        </tr>
-      </tbody>
-    </table>
+    <div id="message-list-container" data-bind="style: { width: listPaneWidth() + '%' }">
+      <div id="inbox-actions" class="button-bar">
+        <ul class="button-group">
+          <li>
+            <a class="left-off-canvas-toggle menu-icon dark button"><span></span></a>
+          </li>
+        </ul>
+
+        <ul class="button-group">
+          <li><a class="button small" data-bind="click: composeNew">Compose</a></li>
+        </ul>
+
+        <ul class="button-group">
+          <li><a class="button small alert">Archive</a></li>
+          <li><a class="button small alert">Delete</a></li>
+        </ul>
+
+      </div>
+
+      <table id="message-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>From</th>
+            <th>Subject</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody data-bind="foreach: messages">
+          <tr data-bind="css: { active: $root.activeMessage() == $data }">
+            <td>
+              <input type="checkbox" />
+            </td>
+            <td>
+              <div>
+                <span class="has-tip"
+                  data-tooltip
+                  data-bind="text: getHumanName(From),
+                    attr: { title: getEmailAddress(From) }"></span>
+              </div>
+            </td>
+            <td>
+              <a href="#" data-bind="text: Subject, click: $root.setActiveMessage"></a>
+            </td>
+            <td data-bind="text: ftime(Date)"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="message-pane" data-bind="style: { width: messagePaneWidth() + '%' }">
+      <div id="no-message" data-bind="style: { display: activeMessage()?'none':'block' }">
+        No message selected
+      </div>
+
+      <!-- ko with: activeMessage -->
+      <h2 data-bind="text: Subject" class="subject-header"></h2>
+      <div class="message-info">
+        <div class="info-line">
+          <span class="info-label">From: </span> 
+          <span data-bind="text: From"></span>
+        </div>
+
+        <div class="info-line">
+          <span class="info-label">To: </span> 
+          <span data-bind="text: To"></span>
+        </div>
+
+        <div class="info-line">
+        	<span class="info-label">At: </span>
+        	<span class="has-tip" data-tooltip
+        		data-bind="attr: { title: 'Received at ' + ftime(chainmailDate) },
+  	      		text: ftime(Date) + ' (' + relativeTime(Date) + ')'"></span>
+        </div>
+      </div>
+
+      <pre data-bind="text: body" class="message-body"></pre>
+
+      <ul class="button-group right message-actions">
+        <li><a class="button small" data-bind="click: $root.composeReply">Reply</a></li>
+        <li>
+          <a class="button small alert" data-bind="">
+            Delete
+          </a>
+        </li>
+        <li>
+          <a class="button small alert" data-bind="click: $root.archiveSingleMessage">
+            Archive
+          </a>
+        </li>
+      </ul>
+      <!-- /ko -->
+    </div>
+
+    <a class="exit-off-canvas"></a>
   </div>
 
-  <div id="message-pane" data-bind="style: { width: messagePaneWidth() + '%' }">
-    <div id="no-message" data-bind="style: { display: activeMessage()?'none':'block' }">
-      No message selected
-    </div>
-
-    <!-- ko with: activeMessage -->
-    <h2 data-bind="text: Subject" class="subject-header"></h2>
-    <div class="message-info">
-      <div class="info-line">
-        <span class="info-label">From: </span> 
-        <span data-bind="text: From"></span>
-      </div>
-
-      <div class="info-line">
-        <span class="info-label">To: </span> 
-        <span data-bind="text: To"></span>
-      </div>
-
-      <div class="info-line">
-      	<span class="info-label">At: </span>
-      	<span class="has-tip" data-tooltip
-      		data-bind="attr: { title: 'Received at ' + ftime(chainmailDate) },
-	      		text: ftime(Date) + ' (' + relativeTime(Date) + ')'"></span>
-      </div>
-    </div>
-
-    <pre data-bind="text: body" class="message-body"></pre>
-
-    <ul class="button-group right message-actions">
-      <li><a class="button small" data-bind="click: $root.composeReply">Reply</a></li>
-      <li>
-        <a class="button small alert" data-bind="">
-          Delete
-        </a>
-      </li>
-      <li>
-        <a class="button small alert" data-bind="click: $root.archiveSingleMessage">
-          Archive
-        </a>
-      </li>
-    </ul>
-    <!-- /ko -->
-  </div>
 </div>
 
 <div id="compose-modal" class="reveal-modal medium" data-reveal>

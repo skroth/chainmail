@@ -6,8 +6,59 @@ SETTINGS = {
 function InboxModel() {
   var self = this
 
+  self.messageSets = {
+    'inbox': {
+      messages: ko.observableArray(),
+      url: '/messages?tag=inbox'
+    },
+    'all': {
+      messages: ko.observableArray(),
+      url: '/messages?tag=*'
+    }
+  }
+
+  self.activeMessageSet = ko.observable(self.messageSets.inbox)
+  self.activeMessageSet.subscribe(function(newSet) {
+    $.getJSON(newSet.url, function(data) {
+      // If we're not populating a new list then show the old one and build up
+      // the new one behind the scenes, only swapping in when it's finished.
+      var addAsProc = !newSet.messages().length,
+        newM = []
+
+      ;(function next(rest) {
+        var message = rest.pop(),
+          cipherKey = sjcl.codec.base64.toBits(message.aes_key),
+          AESKey = elGamalDecrypt(cipherKey, null),
+          cipherText = sjcl.codec.base64.toBits(message.data),
+          iv = sjcl.codec.base64.toBits(message.iv),
+          cipher = new sjcl.cipher.aes(AESKey),
+          result = sjcl.mode.ccm.decrypt(cipher, cipherText, iv, [], 64),
+          parsed = parse2822Message(sjcl.codec.utf8String.fromBits(result))
+
+        // Add back some of the metadata that wasn't encrypted
+        parsed.chainmailID = message.id
+        parsed.chainmailDate = new Date(message.recv_date * 1000)
+        parsed.chainmailInboxTag = message.tag_id
+          
+        if (addAsProc)
+          newSet.messages.push(parsed)
+        else
+          newM.push(parsed)
+
+        // Recur after a timeout, we need to yield control back to the render
+        // "thread" for a bit.
+        if (rest.length) {
+          window.setTimeout(function() { next(rest) }, 0)
+        } else {
+          if (!addAsProc)
+            newSet.messages(newM)
+        }
+      })(data)
+    })
+  })
+
   self.activeMessage = ko.observable(null)
-  self.messages = ko.observableArray()
+  self.messages = ko.computed(function() { return self.activeMessageSet().messages() })
   self.messagePaneWidth = ko.observable(50)
 
   self.listPaneWidth = ko.computed(function() {
@@ -24,17 +75,13 @@ function InboxModel() {
     body: ko.observable()
   }
 
-  self.addMessage = function(message) {
-    self.messages.unshift(message)
-  }
-
   self.setActiveMessage = function(message) {
     self.activeMessage(message)
   }
 
   self.archiveSingleMessage = function(message) {
     $.get('/remove-tags', { tags: message.chainmailInboxTag }, function(data) {
-      self.messages.remove(message)
+      self.messageSets.inbox.messages.remove(message)
     })
   }
 
@@ -48,7 +95,6 @@ function InboxModel() {
     state, othewise all fields will be emptied and populated with data specified
     by an object passes as the first arg */
     if (preloadData !== undefined) {
-      // Nix any data that might be sitting in the input fields currently.
       self.envl.to(preloadData.to || '')
       self.envl.subject(preloadData.subject || '')
       self.envl.body(preloadData.body || '')
@@ -93,9 +139,13 @@ function InboxModel() {
   self.sendStatusHandler = function(data, status, xhr) {
     
   }
+
 }
+
 var viewModel = new InboxModel()
 ko.applyBindings(viewModel)
+
+viewModel.activeMessageSet(viewModel.messageSets.inbox)
 
 X = "AICxV/iefCH6D7LCr+iQBIjzrCM2CZcT39VAqCUcJsfg"
 x = sjcl.bn.fromBits(sjcl.codec.base64.toBits(X))
@@ -136,7 +186,6 @@ function parse2822Message(rawMessage) {
     parsedMessage[name] = value
   }
 
-  console.log(parsedMessage.Date)
   if (parsedMessage.Date) 
     parsedMessage.Date = new Date(Date.parse(parsedMessage.Date))
 
@@ -249,26 +298,6 @@ function strftime(formatString, d) {
   return formatString.replace(matcher, function(_, c) { return recognizedFormats[c]() })
 }
 
-$.getJSON('/messages', function(data) {
-  for (var i=0; i<data.length; i++) {
-    var message = data[i],
-      cipherKey = sjcl.codec.base64.toBits(message.aes_key),
-      AESKey = elGamalDecrypt(cipherKey, null),
-      cipherText = sjcl.codec.base64.toBits(message.data),
-      iv = sjcl.codec.base64.toBits(message.iv),
-      cipher = new sjcl.cipher.aes(AESKey),
-      result = sjcl.mode.ccm.decrypt(cipher, cipherText, iv, [], 64),
-      parsed = parse2822Message(sjcl.codec.utf8String.fromBits(result))
-
-    // Add back some of the metadata that wasn't encrypted
-    parsed.chainmailID = message.id
-    parsed.chainmailDate = new Date(message.recv_date * 1000)
-    parsed.chainmailInboxTag = message.tag_id
-      
-    viewModel.addMessage(parsed)
-  }
-})
-
 $.getJSON('/orient', function(data) { viewModel.me = data })
 
 function getHumanName(s) {
@@ -279,5 +308,10 @@ function getEmailAddress(s) {
   return s.match(/^.+ <(.+?)>$/)[1]
 }
 
-// Init up foundation
-$(document).foundation()
+;(function() {
+  // Init up foundation
+  $(document).foundation()
+
+  // And start loading these mofos
+  //viewModel.onMessageSetChange(viewModel.messageSets.inbox)
+})()
