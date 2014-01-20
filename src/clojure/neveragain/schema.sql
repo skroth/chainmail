@@ -10,8 +10,10 @@ CREATE TABLE users
 CREATE TABLE tags 
 (  id INTEGER PRIMARY KEY,
   name TEXT,
+  owner_id INTEGER,
   message_id INTEGER,
-  FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE);
+  FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE,
+  FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE);
 
 CREATE TABLE messages 
 (  id INTEGER PRIMARY KEY,

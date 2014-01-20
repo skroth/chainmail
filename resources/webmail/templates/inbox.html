@@ -80,7 +80,16 @@
 
     <ul class="button-group right message-actions">
       <li><a class="button small" data-bind="click: $root.composeReply">Reply</a></li>
-      <li><a class="button small alert">Delete</a></li>
+      <li>
+        <a class="button small alert" data-bind="">
+          Delete
+        </a>
+      </li>
+      <li>
+        <a class="button small alert" data-bind="click: $root.archiveSingleMessage">
+          Archive
+        </a>
+      </li>
     </ul>
     <!-- /ko -->
   </div>

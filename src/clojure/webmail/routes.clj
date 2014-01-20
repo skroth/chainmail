@@ -13,7 +13,7 @@
 (defn login-required [func]
   (fn [request]
     (if-not (:user (:session request))
-      {:status 403 :body "403: You must be logged in to view this page"}
+      {:status 403 :body "Hark! This page is not thine! Begone knave!"}
       (func request))))
 
 (defn direct-to-template [template-name]
@@ -29,6 +29,7 @@
   (GET "/inbox" [] (login-required (direct-to-template "inbox.html")))
   (GET "/new-key" [request] (login-required views/make-key))
   (POST "/send" [request] (login-required views/send-mail))
+  (GET "/remove-tags" [request] (login-required views/remove-tag))
   (route/resources "/css" {:root "webmail/css"})
   (route/resources "/js" {:root "webmail/js"})
   (route/resources "/img" {:root "webmail/img"})
@@ -38,5 +39,5 @@
   (-> #'url-routes 
     (wrap-reload '(views))
     wrap-session 
-    wrap-params 
+    wrap-params
     wrap-keyword-params))

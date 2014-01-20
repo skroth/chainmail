@@ -32,6 +32,12 @@ function InboxModel() {
     self.activeMessage(message)
   }
 
+  self.archiveSingleMessage = function(message) {
+    $.get('/remove-tags', { tags: message.chainmailInboxTag }, function(data) {
+      self.messages.remove(message)
+    })
+  }
+
   self.composeNew = function() {
     self.compose()
   }
@@ -214,8 +220,8 @@ function pad(number, padTo) {
 }
 
 function strftime(formatString, d) {
-  var fullDays = [null, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
-    'Saturday', 'Sunday'],
+  var fullDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
+    'Saturday'],
     fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 
       'July', 'August', 'September', 'October', 'November', 'December']
     recognizedFormats = {
@@ -257,6 +263,7 @@ $.getJSON('/messages', function(data) {
     // Add back some of the metadata that wasn't encrypted
     parsed.chainmailID = message.id
     parsed.chainmailDate = new Date(message.recv_date * 1000)
+    parsed.chainmailInboxTag = message.tag_id
       
     viewModel.addMessage(parsed)
   }

@@ -53,11 +53,10 @@
             line (.next (:in conn))]
           (if (= line ".")
             (do
-              (proc-envelope (assoc envl :data (str data line)))
+              (proc-envelope (assoc envl :data data))
               (write-out (:out conn) "250 message accepted")
               {})
-            (do
-              (recur (str data line "\r\n") (.next (:in conn)))))))))
+            (recur (str data line "\r\n") (.next (:in conn))))))))
 
   "EHLO" (fn [msg conn envl]
     (write-out (:out conn) (str "250-" (get-hostname)))

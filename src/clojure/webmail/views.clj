@@ -13,6 +13,24 @@
   (:import
     (org.mindrot.jbcrypt BCrypt)))
 
+(def inboxed-messages-sql "
+  SELECT messages.*, tags.id AS tag_id FROM tags
+  INNER JOIN messages 
+    ON messages.id=tags.message_id
+  WHERE 
+    tags.name='inbox' AND
+    tags.owner_id=?
+  ORDER BY messages.recv_date")
+
+(defn b-and [a b]
+  "A simple macro wrapper so we can use `and` as a first class function"
+  (and a b))
+
+(defn gen-set-placeholders [items]
+  "Returns a string of sql placeholders with one placeholder for each item in
+  the supplied sequence."
+  (str "(" (string/join ", " (map (constantly "?") items)) ")"))
+
 (defn make-redirect 
   ([destination]
     (make-redirect destination "303 Redirected"))
@@ -71,12 +89,49 @@
     "Returns a JSON object letting a web-client user know some things about
     themself, including what we think their address is and the current state of
     their settings in our db"
-    (let [user (first (quick-query db ["SELECT * FROM users WHERE id=? LIMIT 1" 
+    (let [user (first (query db ["SELECT * FROM users WHERE id=? LIMIT 1" 
           (:id (:user (:session request)))]))]
       (json/write-str {
         :address (str (:address user) "@" (:hostname user))
         :realname (:realname user)
       }))))
+
+(defn remove-tag
+  ([request]
+    (remove-tag request settings/db))
+  ([{{{user-id :id} :user} :session {tags "tags"} :query-params} db] 
+    "Deletes a set of tags with ids specified in the `tags` get param iff all are
+    owned by the user making the request."
+    (if-not tags
+      {:status 422 
+       :body "Hark! Thy request is deficient in its `tags`." }
+
+      (let [tag-ids (string/split tags #",")
+          owners (query db (concat
+            [(str 
+              "SELECT owner_id FROM tags WHERE id in " 
+              (gen-set-placeholders tag-ids))]
+            tag-ids))]
+
+        (cond 
+          (> (count tag-ids) 50)
+            {:status 422
+             :body "Hark! Thy askth too much, milord! I can not delete so many!" }
+
+          (not (= (count owners) (count tag-ids)))
+            {:status 422 
+             :body "Hark! One or more of the tags thou asked for art delequent!" }
+
+          (not (every? (partial = user-id) (map :owner_id owners)))
+            {:status 403 
+             :body "Hark! One or more of these is not thy tag to delete! Begone knave!" }
+
+          :else (do
+            (execute! db (concat 
+              [(str "DELETE FROM tags WHERE id in " 
+                (gen-set-placeholders tag-ids))]
+              tag-ids))
+            {:status 200 :body "Hail! Thy quest succeedeth!"}))))))
 
 (defn index [request]
   (if (:user (:session request)) 
@@ -87,7 +142,5 @@
   ([request]
     (list-messages request settings/db))
   ([request db]
-    (with-connection db
-      (with-query-results rs ["SELECT * FROM messages WHERE recipient_id=? ORDER BY recv_date" 
-          (:id (:user (:session request)))] 
-        (json/write-str rs)))))
+    (json/write-str (query db [inboxed-messages-sql 
+      (:id (:user (:session request)))]))))

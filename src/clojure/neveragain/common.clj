@@ -32,31 +32,23 @@
 (defn get-hostname []
   (.getHostName (InetAddress/getLocalHost)))
 
-(defn quick-query [db sql]
-  "Convienience function to execute sql and return the result set."
-  (with-connection db
-    (with-query-results rs (into [] sql)
-      rs)))
-
 (defn get-user-record
   ([address]
     (get-user-record address settings/db))
   ([address db]
-    (with-connection db
-      (with-query-results rs 
-        (into [] (concat ["SELECT * FROM users WHERE address=? AND hostname=?"] 
-          (string/split address #"@")))
-        (first rs)))))
+    (first
+      (query db (into [] (concat 
+        ["SELECT * FROM users WHERE address=? AND hostname=?"]
+        (string/split address #"@")))))))
 
 (defn has-account-here 
   ([address]
     (has-account-here address settings/db))
   ([address db]
-    (with-connection db
-      (with-query-results rs 
-        (into [] (concat ["SELECT 1 FROM users WHERE address=? AND hostname=?"] 
-          (string/split address #"@")))
-        (boolean rs)))))
+    (boolean
+      (query db (into [] (concat 
+        ["SELECT 1 FROM users WHERE address=? AND hostname=?"]
+        (string/split address #"@")))))))
 
 (defn hash-pass [password]
   (BCrypt/hashpw password (BCrypt/gensalt settings/salt-factor)))
@@ -67,11 +59,10 @@
   ([address password db]
     "Returns true if the supplied password matches the stored hashed password
     for the user with address `address`."
-    (with-connection db
-      (with-query-results user-data
-          (into [] (concat ["SELECT hashword FROM users WHERE address=? AND hostname=?"] 
-            (string/split address #"@")))
-        (BCrypt/checkpw password (:hashword (first user-data)))))))
+    (let [user-data (first (query db (into [] (concat
+        ["SELECT hashword FROM users WHERE address=? AND hostname=?"]
+        (string/split address #"@")))))]
+      (BCrypt/checkpw password (:hashword user-data)))))
 
 (defn gen-aes-key
   ([]
@@ -179,23 +170,34 @@
     (save-raw-message message recipient settings/db))
   ([message recipient db]
     "Encrypt a message and save it to the database, placing it in the inbox of
-    the local user with the specified full email address."
-    (with-connection db
-      (with-query-results user-data 
-        (into [] (concat ["SELECT * FROM users WHERE address=? AND hostname=?"] 
-          (string/split recipient #"@")))
-        (let [user (first user-data)
-            pub-key (deserialize-pub-key (:elgamal_pub_key user))
-            [cipher-text enc-key iv] (encrypt-message message pub-key)]
-          (insert-records "messages" {
-            :recipient_id (:id user)
-            :data (apply str (map char (b64/encode cipher-text)))
-            :aes_key (apply str (map char (b64/encode enc-key)))
-            :iv (apply str (map char (b64/encode iv)))
-            :recv_date (quot (System/currentTimeMillis) 1000) }))))))
+    the local user with the specified full email address. Returns the id of the
+    newly saved message."
+    (let [user (first (query db (into [] (concat
+          ["SELECT * FROM users WHERE address=? AND hostname=? LIMIT 1"] 
+          (string/split recipient #"@")))))
+        pub-key (deserialize-pub-key (:elgamal_pub_key user))
+        [cipher-text enc-key iv] (encrypt-message message pub-key)]
+      ; sqlite's last row id key name doesn't play nice with clojure's syntax
+      ; but this'll work
+      (let [message-id ((keyword "last_insert_rowid()") (first
+            (insert! db :messages {
+              :recipient_id (:id user)
+              :data (apply str (map char (b64/encode cipher-text)))
+              :aes_key (apply str (map char (b64/encode enc-key)))
+              :iv (apply str (map char (b64/encode iv)))
+              :recv_date (quot (System/currentTimeMillis) 1000) })))]
+
+        ; Now insert the inbox tag record
+        (insert! db :tags {
+          :owner_id (:id user)
+          :name "inbox"
+          :message_id message-id })
+
+        ; And return the message id, like we said
+        message-id))))
 
 (defn get-mx-hosts [hostname]
-  "Returns a vector containing [priority host] pairs of MX insert-records for a 
+  "Returns a vector containing [priority host] pairs of MX records for a 
   given FQDN"
   (let [env (Hashtable.)]
     (.put env "java.naming.factory.initial" "com.sun.jndi.dns.DnsContextFactory")
@@ -240,7 +242,6 @@
       (recur (.next (:in conn)) (str data "\r\n" line))
       (str data "\r\n" line))))
 
-
 (defn relay-message [envl recipient]
   (let [hostname (get (string/split recipient #"@") 1)
       mx-hosts (get-mx-hosts hostname)]
@@ -261,9 +262,8 @@
             (write-out (:out conn) "DATA")
             (println (read-smtp-block conn))
             (write-out (:out conn) (:data envl))
+            (write-out (:out conn) ".")
             (println (read-smtp-block conn))
-            (println "bug buh why?")
-            (println (:data envl))
             ))))))
 
 (defn proc-envelope [envl]
