@@ -2,6 +2,77 @@
 import socket
 import re
 import sys
+import datetime
+import pytz
+import random
+
+def random_tag(l, dtag):
+  while 1:
+    w, tag = random.choice(l)
+
+    if tag[:2] == dtag[:2]:
+      return w
+
+
+
+def generate_pasta_message(ow_fields):
+  """Have a little fun and make pretend, unique, emails for testing. Will use
+  nltk for some goofing around if we can."""
+  fields = {
+    'message_id': '<911885125.6648512@neveraga.in>',
+    'date': (datetime.datetime.now(pytz.timezone('US/Pacific')) - datetime.timedelta(days=random.randint(0,7), hours=random.randint(0,24), minutes=random.randint(0,60))).strftime('%a, %d %b %Y %H:%M:%S %Z'),
+    'subject': 'This is a test email! Random ID: %d' % random.randint(1, 10000),
+    'body': 'If you install NLTK, and grab the `brown` and `names` corpera then you can get random subject lines and message bodies, making it easier to tell emails apart and less boring to read. You should probably do that.',
+    'from': 'Scriptotron <scriptotron@neveraga.in>',
+    'to': 'Ryan Jenkins <lanny@neveraga.in>'
+  }
+
+  try:
+    import nltk
+    w = nltk.corpus.brown.tagged_words()
+    n = nltk.corpus.names.raw().split('\n')
+
+    first = random.choice(n)
+    last = random_tag(w, 'NN')
+
+    mailer = random_tag(w, 'VB')
+
+    fields['from'] = '%s %s <%s.%s@%smail.com>' % (first.title(), last.title(), first.lower(), last.lower(), mailer.lower())
+
+    thing = random_tag(w, 'NN')+'s'
+    adj = random_tag(w, 'JJ')
+    verb = random_tag(w, 'VB')
+    adverb = random_tag(w, 'RB')
+    thing2 = random_tag(w, 'NN')+'s'
+
+    fields['subject'] = '%s are %s! You should %s %s' % (thing, adj, verb, adverb)
+
+    b = '''I'm totally serious! %s are totally %s and %s and %s. You really need to %s for the sake of %s. %s, if you think about it, are quite a bit like %s in that they both are %s, but are different in that %s are %s while on the other hand %s are %s. Think about it!
+
+Best regards on the matter of %s %s,
+%s %s, over and out!''' % (thing, adj, random_tag(w, 'JJ'), random_tag(w, 'JJ'), verb, random_tag(w, 'NN'), thing, thing2, random_tag(w, 'JJ'), thing, random_tag(w, 'JJ'), thing2, random_tag(w, 'JJ'), adj, thing, first.title(), last.title())
+    fields['body'] = b 
+
+  except NameError: pass
+  except LookupError: pass
+
+  for f in ow_fields:
+    fields[f] = ow_fields[f]
+
+  return ''.join([
+      'Message-ID: %(message_id)s\r\n',
+      'Date: %(date)s\r\n',
+      'From: %(from)s\r\n',
+      'User-Agent: chainmail-test-utility\r\n',
+      'MIME-Version: 1.0\r\n',
+      'To: %(to)s\r\n',
+      'Subject: %(subject)s\r\n',
+      'Content-Type: text/plain; charset=ISO-8859-1; format=flowed\r\n',
+      'Content-Transfer-Encoding: 7bit\r\n',
+      '\r\n',
+      '%(body)s\r\n',
+      '\r\n.\r\n'
+    ]) % fields
 
 scripts = {
   'relay_script': [
@@ -12,22 +83,7 @@ scripts = {
     'MAIL FROM:<lanny@neveraga.in>\r\n',
     'RCPT TO:<lan.rogers.book@gmail.com>\r\n',
     'DATA\r\n',
-    ''.join([
-      'Message-ID: <lol.lol@neveraga.in>\r\n',
-      'Date: Tue, 07 Jan 2014 23:19:31 -0800\r\n',
-      'From: Ryan Jenkins <lanny@neveraga.in>\r\n',
-      'User-Agent: chainmail-test-utility\r\n',
-      'MIME-Version: 1.0\r\n',
-      'To: lan.rogers.book@gmail.com\r\n',
-      'Subject: Can you hear me now?\r\n',
-      'Content-Type: text/plain; charset=ISO-8859-1; format=flowed\r\n',
-      'Content-Transfer-Encoding: 7bit\r\n',
-      '\r\n',
-      'Woot, secuirty. Hellz to teh yeah.\r\n',
-      '\r\n',
-      'Sent from my testscriptPhone.\r\n',
-      '\r\n.\r\n'
-    ]),
+    generate_pasta_message({'to': 'lan.rogers.book@gmail.com', 'from': 'lanny@neveraga.in'}),
     'QUIT\r\n'
   ], 
   'endpoint_single_user': [
@@ -35,22 +91,7 @@ scripts = {
     'MAIL FROM:<lan.rogers.book@gmail.com>\r\n',
     'RCPT TO:<lanny@neveraga.in>\r\n',
     'DATA\r\n',
-    ''.join([
-      'Message-ID: <52CCFC03.2010102@gmail.com>\r\n',
-      'Date: Tue, 07 Jan 2014 23:19:31 -0800\r\n',
-      'From: Ryan Jenkins <lan.rogers.book@gmail.com>\r\n',
-      'User-Agent: Mozilla/5.0 (Windows NT 6.2; WOW64; rv:24.0) Gecko/20100101 Thunderbird/24.1.0\r\n',
-      'MIME-Version: 1.0\r\n',
-      'To: lanny@neveraga.in\r\n',
-      'Subject: Sup Brah?\r\n',
-      'Content-Type: text/plain; charset=ISO-8859-1; format=flowed\r\n',
-      'Content-Transfer-Encoding: 7bit\r\n',
-      '\r\n',
-      'qwertyuiop\r\n',
-      '\r\n',
-      'loljk\r\n',
-      '\r\n.\r\n'
-    ]),
+    generate_pasta_message({'to': 'lanny@neveraga.in'}),
     'QUIT\r\n'
   ]}
 
