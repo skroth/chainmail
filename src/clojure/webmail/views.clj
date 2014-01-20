@@ -9,7 +9,8 @@
     (clojure.data.codec [base64 :as b64])
     [clojure.string :as string]
     [compojure.handler :as handler]
-    [compojure.response :as response])
+    [compojure.response :as response]
+    [selmer.parser :as selmer])
   (:import
     (org.mindrot.jbcrypt BCrypt)))
 
@@ -57,6 +58,11 @@
          :body "Login successful."
          :headers {"Location" "/inbox"}
          :session (assoc (:session request) :user user)}))))
+
+(defn logout [request]
+  {:status 200
+   :body "Logout successful"
+   :session {}})
 
 (defn make-key
   ([request]
@@ -155,3 +161,9 @@
     (if (= tag "*")
       (json/write-str (query db [all-messages-sql user-id]))
       (json/write-str (query db [tagged-messages-sql tag user-id])))))
+
+(defn settings
+  ([request]
+    (settings request settings/db))
+  ([request db]
+    (selmer/render-file "webmail/templates/settings.html" nil)))

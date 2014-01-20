@@ -1,3 +1,7 @@
 .dark {
     background: #333;
 }
+
+.dark.button:hover {
+    background: #000;
+}

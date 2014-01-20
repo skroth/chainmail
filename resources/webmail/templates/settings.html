@@ -1,0 +1,80 @@
+{% extends "webmail/templates/base.html" %}
+
+{% block css %}
+{% endblock %}
+
+{% block content %}
+  <div class="small-10 small-offset-1 columns">
+    <form method="POST" data-abide> 
+      <fieldset>
+        <legend>Transfer Settings</legend>
+
+        <div class="row panel">
+          <div class="small-6 columns">
+            <label>
+              Maximum Line Length
+              <input type="text" name="max-line-length" required pattern="\d+" />
+            </label>
+          </div>
+          <div class="small-6 columns">
+            When transfering email, messages have to be broken into lines. The
+            standard specifies lines should not exceed 78 characters although
+            most foriegn servers as well as all Chainmail servers can handle more.
+            Setting this higher than 998 will, however, cause delevery to most
+            foreign servers to fail.
+          </div>
+        </div>
+
+        <div class="row panel">
+          <div class="small-6 columns">
+            <label>Accept mail over non-SSL connections</label>
+
+            <label>
+              <input type="radio" name="non-ssl-ok" value="1" /> Yes
+            </label>
+            <label>
+              <input type="radio" name="non-ssl-ok" value="0" /> No
+            </label>
+          </div>
+          <div class="small-6 columns">
+            If set to "No" Chainmail will not accept transfer of message data
+            from any foreign server that's not using SSL. This forces users
+            sending data to you to use SSL, which is more secure, but you run
+            the risk of mail not getting though if the sender can't or won't use
+            SSL.
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Webmail Settings</legend>
+
+        <div class="row panel">
+          <div class="small-6 columns">
+            <label>
+              Date-time Format
+              <input type="text" name="date-time-format" />
+            </label>
+          </div>
+          <div class="small-6 columns">
+            How you would like dates and times presented, follows the strftime
+            format (excepting some qirks), a refrence for which you can 
+            find <a href="http://www.cplusplus.com/reference/ctime/strftime/">here</a>.
+          </div>
+        </div>
+      </fieldset>
+
+      <ul class="button-group right">
+        <li><button class="button alert">Discard</button></li>
+        <li><button class="button">Save</button></li>
+      </ul>
+    </form>
+  </div>
+
+{% endblock %}
+
+{% block js %}
+<script type="text/javascript">
+  $(document).foundation()
+</script>
+{% endblock %}
