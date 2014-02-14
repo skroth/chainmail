@@ -1,10 +1,11 @@
 (ns neveragain.common
-  (:require 
+  (:require
     (clojure [string :as string])
     (clojure.java [jdbc :refer :all])
+    (clojure.data [json :as json])
     [clojure.data.codec.base64 :as b64]
     (neveragain [settings :as settings]))
-  (:import 
+  (:import
     (neveragain CustomPublicKey)
     (java.net ServerSocket InetAddress Socket)
     (org.bouncycastle.jce.provider BouncyCastleProvider)
@@ -13,6 +14,7 @@
     (org.bouncycastle.crypto.engines AESFastEngine)
     (org.bouncycastle.crypto.params KeyParameter CCMParameters)
     (java.lang.String)
+    (java.util Date)
     (java.security KeyPairGenerator SecureRandom Security)
     (java.io PrintWriter InputStreamReader BufferedReader IOException)
     (java.util Hashtable Scanner NoSuchElementException)
@@ -29,6 +31,11 @@
   (.println out-writer (str message "\r"))
   (.flush out-writer))
 
+(defn strftime [fmt t]
+  ; Convert strftime to String.format format (e.g. %m -> %1$tm)
+  (let [fmt (.replaceAll fmt "%([a-zA-Z])" "%1\\$t$1")]
+    (format fmt t)))
+
 (defn get-hostname []
   (.getHostName (InetAddress/getLocalHost)))
 
@@ -37,23 +44,23 @@
     (get-user-record address settings/db))
   ([address db]
     (first
-      (query db (into [] (concat 
+      (query db (into [] (concat
         ["SELECT * FROM users WHERE address=? AND hostname=?"]
         (string/split address #"@")))))))
 
-(defn has-account-here 
+(defn has-account-here
   ([address]
     (has-account-here address settings/db))
   ([address db]
     (boolean
-      (query db (into [] (concat 
+      (query db (into [] (concat
         ["SELECT 1 FROM users WHERE address=? AND hostname=?"]
         (string/split address #"@")))))))
 
 (defn hash-pass [password]
   (BCrypt/hashpw password (BCrypt/gensalt settings/salt-factor)))
 
-(defn match-pass 
+(defn match-pass
   ([address password]
     (match-pass address password settings/db))
   ([address password db]
@@ -73,10 +80,10 @@
       (.init kg key-size)
       (KeyParameter. (.getEncoded (.generateKey kg))))))
 
-(defn gen-key-pair 
+(defn gen-key-pair
   ([]
     (gen-key-pair settings/default-ecc-key-size))
-  ([key-length] 
+  ([key-length]
     "Generate a random ElGamal key pair with a given key length."
     (let [kpg (KeyPairGenerator/getInstance  "ElGamal" "BC")]
       (.initialize kpg key-length (SecureRandom.))
@@ -94,18 +101,18 @@
     (CustomPublicKey. (ElGamalPublicKeySpec. y (ElGamalParameterSpec. p g)))))
 
 (defn block-proc [cipher message]
-  "Sequentially processes blocks of an arbitrary sized sequence using an 
+  "Sequentially processes blocks of an arbitrary sized sequence using an
   initialized cipher. Seq must be castable to a byte array."
   (let [block-size (.getBlockSize cipher)]
-    (loop [next-block (take block-size message) 
-        cipher-text [] 
+    (loop [next-block (take block-size message)
+        cipher-text []
         remaining (drop block-size message)]
       (if (= (count next-block) block-size)
-        (recur 
+        (recur
           (take block-size remaining)
           (concat cipher-text (seq (.update cipher (byte-array next-block))))
           (drop block-size remaining))
-        (byte-array (concat cipher-text 
+        (byte-array (concat cipher-text
           (.doFinal cipher (byte-array next-block))))))))
 
 (defn bc-block-proc [cipher message]
@@ -124,15 +131,15 @@
     rbytes))
 
 (defn encrypt-message [message pub-key]
-  "Encrypt a message and return the cipher text and an encrypted AES key (the 
-  message is encrypted with the AES key, the AES key is encrypted with the 
+  "Encrypt a message and return the cipher text and an encrypted AES key (the
+  message is encrypted with the AES key, the AES key is encrypted with the
   public key) and the initialization vector used with the AES key."
   (let [aes-key (gen-aes-key)
       aes-cipher (CCMBlockCipher. (AESFastEngine.))
       elgamal-cipher (Cipher/getInstance "ElGamal/None/NoPadding" "BC")
       iv (random-bytes 13) ; Random 13 byte IV/nonce
-      ccm-params (CCMParameters. 
-        aes-key 
+      ccm-params (CCMParameters.
+        aes-key
         64 ; 64 bit tag size, we'll stick with it across the system
         iv
         (.getBytes ""))] ; 0 bytes of associated data
@@ -156,15 +163,15 @@
         iv (byte-array (take 15 cipher-seq))
         tag (byte-array (take-last 8 cipher-seq))
         actual-cipher-text (byte-array (drop 15 cipher-seq))
-        ccm-params (CCMParameters. 
-          aes-key 
+        ccm-params (CCMParameters.
+          aes-key
           64 ; 64 bit tag size, we'll stick with it across the system
           iv ; Random 15 byte IV
           (.getBytes ""))]
       (.init aes-cipher false ccm-params)
       (bc-block-proc aes-cipher actual-cipher-text))))
 
-(defn save-raw-message 
+(defn save-raw-message
   ([message recipient]
     "Call save-raw-message with the default database"
     (save-raw-message message recipient settings/db))
@@ -173,7 +180,7 @@
     the local user with the specified full email address. Returns the id of the
     newly saved message."
     (let [user (first (query db (into [] (concat
-          ["SELECT * FROM users WHERE address=? AND hostname=? LIMIT 1"] 
+          ["SELECT * FROM users WHERE address=? AND hostname=? LIMIT 1"]
           (string/split recipient #"@")))))
         pub-key (deserialize-pub-key (:elgamal_pub_key user))
         [cipher-text enc-key iv] (encrypt-message message pub-key)]
@@ -183,6 +190,7 @@
             (insert! db :messages {
               :recipient_id (:id user)
               :data (apply str (map char (b64/encode cipher-text)))
+              :pub_key (:elgamal_pub_key user)
               :aes_key (apply str (map char (b64/encode enc-key)))
               :iv (apply str (map char (b64/encode iv)))
               :recv_date (quot (System/currentTimeMillis) 1000) })))]
@@ -197,7 +205,7 @@
         message-id))))
 
 (defn get-mx-hosts [hostname]
-  "Returns a vector containing [priority host] pairs of MX records for a 
+  "Returns a vector containing [priority host] pairs of MX records for a
   given FQDN"
   (let [env (Hashtable.)]
     (.put env "java.naming.factory.initial" "com.sun.jndi.dns.DnsContextFactory")
@@ -209,7 +217,7 @@
       (loop [hosts []]
         (if (.hasMore attr)
           (recur (conj hosts ; append [priority host] to the hosts vector
-            (string/split 
+            (string/split
               ; Pop off the trailing period
               (string/join "" (butlast (.next attr))) #"\s")))
           ; Sort the list by ascending "distance"
@@ -242,7 +250,51 @@
       (recur (.next (:in conn)) (str data "\r\n" line))
       (str data "\r\n" line))))
 
+(defn prep-2822-message [headers body]
+  "Prepare a message for transmission per the RFC 2822 spec. Takes a string to
+  string map for headers and a simple string for body. Will handle line breaking
+  and escaping."
+  (string/join "\r\n" (conj
+    (vec (for [[k v] headers]
+      (str
+        (string/replace (name k) #":" "(colon)")
+        ": "
+        (string/replace v #":" "(colon)"))))
+    "" ; Create a double new line between headers and content
+    (string/replace body "\r\n.\r\n" "\r\n .\r\n"))))
+
+(defn rewrite-for-forwarding [envl user forwarding-address]
+  "Encrypts a plaintext envelope and wraps it in a secondary envelope to be
+  transmitted to a third party email provider. Returns modified envelope."
+  (let [pub-key (deserialize-pub-key (:elgamal_pub_key user))
+      [cipher-text enc-key iv] (encrypt-message (:data envl) pub-key)]
+    (prep-2822-message
+      {:Content-Transfer-Encoding "8bit"
+       :Content-Type "text/plain; charset=utf-8"
+       :Date (strftime "%a, %d %b %Y %H:%M:%S %Z" (Date.))
+       :From (str "Chainmail Mailer Daemon <tutivillus@" (get-hostname) ">")
+       :MIME-Version "1.0"
+       :Subject "Forwarded Ciphertext Contained Within"
+       :To forwarding-address
+       :User-Agent "Chainmail/Daemon" }
+      (str
+        "Below is an encrypted message sent to " (:address user) "@"
+        (:hostname user) ". No further information is available until the "
+        "message has been decrypted. To do so you'll need to install a "
+        "chainmail integration plugin available at <OUR ADDRESS> and have your "
+        "private key on hand.\r\n"
+        "=== BEGIN CHAINMAIL DATA ===\r\n"
+        (json/write-str {
+          :protocol_version "0.1"
+          :data (apply str (map char (b64/encode cipher-text)))
+          :aes_key (apply str (map char (b64/encode enc-key)))
+          :iv (apply str (map char (b64/encode iv)))
+          :recv_date (quot (System/currentTimeMillis) 1000) })))))
+
 (defn relay-message [envl recipient]
+  "Accepts an envelope and a single recipient, then acts as a SMTP client,
+  transmitting the envelope, unmodified, to the host suggested by the
+  recipient's address."
   (let [hostname (get (string/split recipient #"@") 1)
       mx-hosts (get-mx-hosts hostname)]
     (loop [[[priority host] & remaining] mx-hosts]
@@ -266,8 +318,21 @@
             (println (read-smtp-block conn))
             ))))))
 
-(defn proc-envelope [envl]
-  (dorun (for [recipient (:recipients envl)]
-    (if (has-account-here recipient)
-      (save-raw-message (:data envl) recipient)
-      (relay-message envl recipient)))))
+(defn proc-envelope
+  ([envl]
+    (proc-envelope envl settings/db))
+  ([envl db]
+    (dorun (for [recipient (:recipients envl)]
+      (let [user (get-user-record recipient)]
+        (if-not user
+          (relay-message envl recipient)
+          (let [directives (query db [
+              "SELECT * FROM forwarding_directives WHERE owner_id=?"
+              (:id user)])]
+            ; Save the message to the database no matter what
+            (save-raw-message (:data envl) recipient)
+
+            ; and forward it if there were any directives
+            (dorun (for [directive directives]
+              (relay-message (rewrite-for-forwarding envl user
+                (:destination_address directive))))))))))))

@@ -1,24 +1,22 @@
 (ns webmail.views
   (:use compojure.core
     ring.util.response)
-  (:require 
+  (:require
     (neveragain [common :refer :all])
     (neveragain [settings :as settings])
     (clojure.java [jdbc :refer :all])
     (clojure.data [json :as json])
     (clojure.data.codec [base64 :as b64])
     [clojure.string :as string]
-    [compojure.handler :as handler]
-    [compojure.response :as response]
     [selmer.parser :as selmer])
   (:import
     (org.mindrot.jbcrypt BCrypt)))
 
 (def tagged-messages-sql "
   SELECT messages.*, tags.id AS tag_id FROM tags
-  INNER JOIN messages 
+  INNER JOIN messages
     ON messages.id=tags.message_id
-  WHERE 
+  WHERE
     tags.name=? AND
     tags.owner_id=?
   ORDER BY messages.recv_date
@@ -39,11 +37,11 @@
   the supplied sequence."
   (str "(" (string/join ", " (map (constantly "?") items)) ")"))
 
-(defn make-redirect 
+(defn make-redirect
   ([destination]
     (make-redirect destination "303 Redirected"))
   ([destination message]
-    {:status 303 
+    {:status 303
      :body message
      :headers {"Location" destination} }))
 
@@ -67,15 +65,18 @@
 (defn make-key
   ([request]
     (make-key request settings/db))
-  ([request db]
-    "Generate a new elGamal key pair, store the public material in the database 
+  ([{{user :user} :session} db]
+    "Generate a new elGamal key pair, store the public material in the database
     and send the private key to the user."
-    ; THE ABOVE COMMENT IS A LIE!
     (let [key-pair (gen-key-pair)
         pub-key (.getPublic key-pair)
         priv-key (.getPrivate key-pair)]
+      (update! db
+               :users
+               {:elgamal_pub_key (serialize-pub-key pub-key)}
+               ["id = ?" (:id user)])
       (json/write-str
-        (reduce 
+        (reduce
           ; b64 encode the 4 BigIntegers that make up the keypair
           (fn [m [key val]]
             (assoc m key (apply str (map char (b64/encode (.toByteArray val))))))
@@ -95,14 +96,14 @@
     {:status 200
      :body (json/write-str {:status "success"})}))
 
-(defn orient 
+(defn orient
   ([request]
     (orient request settings/db))
   ([request db]
     "Returns a JSON object letting a web-client user know some things about
     themself, including what we think their address is and the current state of
     their settings in our db"
-    (let [user (first (query db ["SELECT * FROM users WHERE id=? LIMIT 1" 
+    (let [user (first (query db ["SELECT * FROM users WHERE id=? LIMIT 1"
           (:id (:user (:session request)))]))]
       (json/write-str {
         :address (str (:address user) "@" (:hostname user))
@@ -112,46 +113,46 @@
 (defn remove-tag
   ([request]
     (remove-tag request settings/db))
-  ([{{{user-id :id} :user} :session {tags "tags"} :query-params} db] 
+  ([{{{user-id :id} :user} :session {tags "tags"} :query-params} db]
     "Deletes a set of tags with ids specified in the `tags` get param iff all are
     owned by the user making the request."
     (if-not tags
-      {:status 422 
+      {:status 422
        :body "Hark! Thy request is deficient in its `tags`." }
 
       (let [tag-ids (string/split tags #",")
           owners (query db (concat
-            [(str 
-              "SELECT owner_id FROM tags WHERE id in " 
+            [(str
+              "SELECT owner_id FROM tags WHERE id in "
               (gen-set-placeholders tag-ids))]
             tag-ids))]
 
-        (cond 
+        (cond
           (> (count tag-ids) 50)
             {:status 422
              :body "Hark! Thy askth too much, milord! I can not delete so many!" }
 
           (not (= (count owners) (count tag-ids)))
-            {:status 422 
+            {:status 422
              :body "Hark! One or more of the tags thou asked for art delequent!" }
 
           (not (every? (partial = user-id) (map :owner_id owners)))
-            {:status 403 
+            {:status 403
              :body "Hark! One or more of these is not thy tag to delete! Begone knave!" }
 
           :else (do
-            (execute! db (concat 
-              [(str "DELETE FROM tags WHERE id in " 
+            (execute! db (concat
+              [(str "DELETE FROM tags WHERE id in "
                 (gen-set-placeholders tag-ids))]
               tag-ids))
             {:status 200 :body "Hail! Thy quest succeedeth!"}))))))
 
 (defn index [request]
-  (if (:user (:session request)) 
+  (if (:user (:session request))
     (make-redirect "/inbox")
     (make-redirect "/login")))
 
-(defn list-messages 
+(defn list-messages
   ([request]
     (list-messages request settings/db))
   ([{{{user-id :id} :user} :session {tag "tag"} :params} db]
