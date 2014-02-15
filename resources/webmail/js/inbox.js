@@ -17,19 +17,30 @@ function InboxModel() {
     }
   }
 
+  self.statusText = ko.observable('transfering messages')
+
   self.activeMessageSet = ko.observable(self.messageSets.inbox)
   self.activeMessageSet.subscribe(function(newSet) {
+    self.statusText('transfering messages')
+
     $.getJSON(newSet.url, function(data) {
       // If we're not populating a new list then show the old one and build up
       // the new one behind the scenes, only swapping in when it's finished.
       var addAsProc = !newSet.messages().length,
-        newM = []
+        newM = [],
+        i = 0
 
       ;(function next(rest) {
+        var baseText = 'decrypting message ' + (++i) + ' of ' + data.length
+        self.statusText(baseText + ' (elGamal)')
+
         var message = rest.pop(),
           cipherKey = sjcl.codec.base64.toBits(message.aes_key),
-          AESKey = elGamalDecrypt(cipherKey, null),
-          cipherText = sjcl.codec.base64.toBits(message.data),
+          AESKey = elGamalDecrypt(cipherKey, privKey)
+
+        self.statusText(baseText + ' (AES)')
+
+        var cipherText = sjcl.codec.base64.toBits(message.data),
           iv = sjcl.codec.base64.toBits(message.iv),
           cipher = new sjcl.cipher.aes(AESKey),
           result = sjcl.mode.ccm.decrypt(cipher, cipherText, iv, [], 64),
@@ -39,7 +50,7 @@ function InboxModel() {
         parsed.chainmailID = message.id
         parsed.chainmailDate = new Date(message.recv_date * 1000)
         parsed.chainmailInboxTag = message.tag_id
-          
+
         if (addAsProc)
           newSet.messages.push(parsed)
         else
@@ -50,6 +61,9 @@ function InboxModel() {
         if (rest.length) {
           window.setTimeout(function() { next(rest) }, 0)
         } else {
+          self.statusText('done')
+          window.setTimeout(function() { self.statusText(null) }, 1000)
+
           if (!addAsProc)
             newSet.messages(newM)
         }
@@ -109,7 +123,7 @@ function InboxModel() {
       'Date: ' + strftime('%a, %d %b %Y %H:%M:%S %Z', new Date()) + '\r\n' +
       'From: "' + self.me.realname + ' <' + self.me.address + '>"\r\n' +
       'MIME-Version: "1.0"\r\n' +
-      'Message-ID: "<' + Date.now() + '.' + Math.random().toString().substr(2) + 
+      'Message-ID: "<' + Date.now() + '.' + Math.random().toString().substr(2) +
         '@' + self.me.address.split('@')[1] + '>"\r\n' +
       'Subject: "' + self.envl.subject().replace(/[\r\n]/gi, '') + '"\r\n' +
       'To: "' + self.envl.to() + '"\r\n' +
@@ -137,7 +151,7 @@ function InboxModel() {
   }
 
   self.sendStatusHandler = function(data, status, xhr) {
-    
+
   }
 
 }
@@ -148,9 +162,12 @@ ko.applyBindings(viewModel)
 viewModel.activeMessageSet(viewModel.messageSets.inbox)
 
 X = "AICxV/iefCH6D7LCr+iQBIjzrCM2CZcT39VAqCUcJsfg"
-x = sjcl.bn.fromBits(sjcl.codec.base64.toBits(X))
 P = "AMP1dAI9SD68MgN50pCx8qtZUYywqflFLCc0jBbR3nZL"
-p = sjcl.bn.fromBits(sjcl.codec.base64.toBits(P))
+
+privKey = {
+  p: sjcl.bn.fromBits(sjcl.codec.base64.toBits(P)),
+  x: sjcl.bn.fromBits(sjcl.codec.base64.toBits(X))
+}
 
 function elGamalDecrypt(block, privKey) {
   // Pretty much a line for line transliteration of BC's ElGamal decrpytion
@@ -159,7 +176,9 @@ function elGamalDecrypt(block, privKey) {
     in2 = sjcl.bitArray.bitSlice(block, inBitLength/2, inBitLength),
     gamma = sjcl.bn.fromBits(in1),
     phi = sjcl.bn.fromBits(in2),
-    result = gamma.powermod(p.sub(1).sub(x), p).mul(phi).mod(p)
+    result = gamma.powermod(p.sub(1).sub(privKey.x), privKey.p)
+      .mul(phi)
+      .mod(privKey.p)
 
     return result.toBits()
 }
@@ -186,7 +205,7 @@ function parse2822Message(rawMessage) {
     parsedMessage[name] = value
   }
 
-  if (parsedMessage.Date) 
+  if (parsedMessage.Date)
     parsedMessage.Date = new Date(Date.parse(parsedMessage.Date))
 
   parsedMessage.body = body
@@ -209,7 +228,7 @@ function transmitEncode(message) {
       k = SETTINGS.maxLineLength
 
     while (part.length > SETTINGS.maxLineLength) {
-      while (part[k] != ' ' && k > 0) 
+      while (part[k] != ' ' && k > 0)
         k--
 
       if (k <= 0)
@@ -229,14 +248,14 @@ function transmitEncode(message) {
 function blockQuote(message) {
   /* Takes a 2822 style message object and returns it with one higher level of
   block quotation and a header identifying the original author and time */
-  return '\r\n\r\nOn ' + ftime(message.Date) + 
+  return '\r\n\r\nOn ' + ftime(message.Date) +
     ', ' + message.From + ' wrote:\r\n' +
     message.body.replace(/(^|[\r\n][\r\n]?)/g, '$1>')
 }
 
 function relativeTime(then) {
   var now = new Date(),
-    delta = now - then, 
+    delta = now - then,
     times = [
       ['year', 1000*60*60*24*356],
       ['month', 1000*60*60*24*28],
@@ -269,9 +288,9 @@ function pad(number, padTo) {
 }
 
 function strftime(formatString, d) {
-  var fullDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
+  var fullDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
     'Saturday'],
-    fullMonths = ['January', 'February', 'March', 'April', 'May', 'June', 
+    fullMonths = ['January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December']
     recognizedFormats = {
       'A': function(c) { return fullDays[d.getDay()] },
@@ -289,7 +308,7 @@ function strftime(formatString, d) {
       'y': function(c) { return d.getFullYear().toString().substr(3) },
       'Z': function(c) { var o=d.getTimezoneOffset(),h=Math.floor(o/60),m=o-h*60; return 'GMT' + ((o>0)?'-':'+') + pad(h, 2) + pad(m, 2) }
     },
-    matchables = '' 
+    matchables = ''
 
   for (c in recognizedFormats) { matchables += c }
 

@@ -123,7 +123,10 @@
 
     <a class="exit-off-canvas"></a>
   </div>
+</div>
 
+<div id="status-text" data-bind="text: statusText, 
+  style: { display: statusText()?'block':'none' }">
 </div>
 
 <div id="compose-modal" class="reveal-modal medium" data-reveal>

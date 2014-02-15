@@ -30,6 +30,16 @@
   margin-left: 20px;
 }
 
+#status-text {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  background: #333;
+  color: white;
+  padding: .2em .5em;
+  font-size: 11px;
+}
+
 .info-line {
   border-bottom: 1px solid #777;
   padding: .5em 20px;

@@ -36,7 +36,25 @@
     (is (:y resp))
     (is (not (= new-key old-key)))))
 
-;(deftest test-key-pair-generation
-;  (let [kp (common/gen-key-pair)]
-;    (is (instance? KeyPair kp))
-;    (is (re-matches #"\d+/\d+/\d+" (common/serialize-pub-key (.getPublic kp))))))
+(deftest test-register
+  (let [old-users-num (:n (first (j/query test-db
+                                          ["SELECT COUNT(*) AS n FROM users"])))
+        req {:params {"address" "new.account"
+                      "domain" "neveraga.in"
+                      "password" "testpass"
+                      "realname" "New J. Account"}}
+        res (json/read-str (views/register req)
+                           :key-fn keyword)
+        ; Try the same thing again to make sure we can't register a address/name
+        ; combo more than once.
+        res-two (json/read-str (views/register req)
+                                :key-fn keyword)
+        new-users-num (:n (first (j/query test-db
+                                          ["SELECT COUNT(*) AS n FROM users"])))]
+    (is res)
+    (is (= (- new-users-num old-users-num) 1))
+    (is (:x (:pub_key res)))
+    (is (:p (:pub_key res)))
+    (is (= (:status res) "success"))
+    (is (= (:status res-two) "failure"))
+    (is (not (:pub_key res-two)))))

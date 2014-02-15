@@ -250,6 +250,24 @@
       (recur (.next (:in conn)) (str data "\r\n" line))
       (str data "\r\n" line))))
 
+(defn safe-chop [s len]
+  (let [i (min len (count s))]
+    [(subs s 0 i) (subs s i)]))
+
+(defn next-line [s len]
+  (let [[t-line remaining] (safe-chop s len)
+        chop-i (+ 1 (.lastIndexOf (String. t-line) " "))]
+    (if (< chop-i 1)
+      [t-line remaining]
+      (safe-chop s chop-i))))
+
+(defn break-lines [s line-length]
+  (loop [lines []
+         [line s-left] (next-line s line-length)]
+    (if (seq s-left)
+      (recur (conj lines line) (next-line s-left line-length))
+      (string/join "\r\n" (conj lines line)))))
+
 (defn prep-2822-message [headers body]
   "Prepare a message for transmission per the RFC 2822 spec. Takes a string to
   string map for headers and a simple string for body. Will handle line breaking
@@ -261,35 +279,40 @@
         ": "
         (string/replace v #":" "(colon)"))))
     "" ; Create a double new line between headers and content
-    (string/replace body "\r\n.\r\n" "\r\n .\r\n"))))
+    (string/replace (break-lines body 78)
+                    "\r\n.\r\n"
+                    "\r\n .\r\n"))))
 
 (defn rewrite-for-forwarding [envl user forwarding-address]
   "Encrypts a plaintext envelope and wraps it in a secondary envelope to be
   transmitted to a third party email provider. Returns modified envelope."
   (let [pub-key (deserialize-pub-key (:elgamal_pub_key user))
-      [cipher-text enc-key iv] (encrypt-message (:data envl) pub-key)]
-    (prep-2822-message
-      {:Content-Transfer-Encoding "8bit"
-       :Content-Type "text/plain; charset=utf-8"
-       :Date (strftime "%a, %d %b %Y %H:%M:%S %Z" (Date.))
-       :From (str "Chainmail Mailer Daemon <tutivillus@" (get-hostname) ">")
-       :MIME-Version "1.0"
-       :Subject "Forwarded Ciphertext Contained Within"
-       :To forwarding-address
-       :User-Agent "Chainmail/Daemon" }
-      (str
-        "Below is an encrypted message sent to " (:address user) "@"
-        (:hostname user) ". No further information is available until the "
-        "message has been decrypted. To do so you'll need to install a "
-        "chainmail integration plugin available at <OUR ADDRESS> and have your "
-        "private key on hand.\r\n"
-        "=== BEGIN CHAINMAIL DATA ===\r\n"
-        (json/write-str {
-          :protocol_version "0.1"
-          :data (apply str (map char (b64/encode cipher-text)))
-          :aes_key (apply str (map char (b64/encode enc-key)))
-          :iv (apply str (map char (b64/encode iv)))
-          :recv_date (quot (System/currentTimeMillis) 1000) })))))
+        [cipher-text enc-key iv] (encrypt-message (:data envl) pub-key)
+        tutivillus (str "tutivillus@" (get-hostname))
+        headers {:Content-Transfer-Encoding "8bit"
+                 :Content-Type "text/plain; charset=utf-8"
+                 :Date (strftime "%a, %d %b %Y %H:%M:%S %Z" (Date.))
+                 :From (str "Chainmail Mailer Daemon <" tutivillus ">")
+                 :MIME-Version "1.0"
+                 :Subject "Forwarded Ciphertext Contained Within"
+                 :To forwarding-address
+                 :User-Agent "Chainmail/Daemon" }
+        body (str
+              "Below is an encrypted message sent to " (:address user) "@"
+              (:hostname user) ". No further information is available until the "
+              "message has been decrypted. To do so you'll need to install a "
+              "chainmail integration plugin available at <OUR ADDRESS> and have your "
+              "private key on hand.\r\n"
+              "=== BEGIN CHAINMAIL DATA ===\r\n"
+              (json/write-str
+               {:protocol_version "0.1"
+                :data (apply str (map char (b64/encode cipher-text)))
+                :aes_key (apply str (map char (b64/encode enc-key)))
+                :iv (apply str (map char (b64/encode iv)))
+                :recv_date (quot (System/currentTimeMillis) 1000) }))]
+    {:from tutivillus
+     :to [forwarding-address]
+     :data (prep-2822-message headers body) }))
 
 (defn relay-message [envl recipient]
   "Accepts an envelope and a single recipient, then acts as a SMTP client,
@@ -305,6 +328,7 @@
           (if (seq remaining) (recur remaining) nil)
           (do
             (write-out (:out conn) (str "EHLO " (get-hostname)))
+            (println (str "S: " "EHLO " (get-hostname)))
             ; Read the EHLO response, don't do anything with it for the moment.
             (println (read-smtp-block conn))
             (write-out (:out conn) (str "MAIL FROM:<" (:from envl) ">"))
@@ -316,6 +340,7 @@
             (write-out (:out conn) (:data envl))
             (write-out (:out conn) ".")
             (println (read-smtp-block conn))
+            (write-out (:out conn) "EXIT")
             ))))))
 
 (defn proc-envelope
@@ -333,6 +358,6 @@
             (save-raw-message (:data envl) recipient)
 
             ; and forward it if there were any directives
-            (dorun (for [directive directives]
-              (relay-message (rewrite-for-forwarding envl user
-                (:destination_address directive))))))))))))
+            (dorun (for [{f-address :destination_address} directives]
+              (relay-message (rewrite-for-forwarding envl user f-address)
+                             f-address))))))))))

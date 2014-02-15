@@ -29,10 +29,10 @@
           <div class="small-6 columns">
             <label>Accept mail over non-SSL connections</label>
 
-            <label>
+            <label class="inline">
               <input type="radio" name="non-ssl-ok" value="1" /> Yes
             </label>
-            <label>
+            <label class="inline">
               <input type="radio" name="non-ssl-ok" value="0" /> No
             </label>
           </div>
@@ -64,13 +64,33 @@
         </div>
       </fieldset>
 
+      <fieldset>
+        <legend>Forwarding</legend>
+        <div class="row panel">
+          <div class="small-6 columns">
+          <label>
+            Address
+            <input type="email" name="forwarding-address-1" />
+          </label>
+          <a id="add-address" href="#">Add Another</a>
+          </div>
+          <div class="small-6 columns">
+            For every email you receive at this address we'll send an 
+            <em>encrypted copy</em> to each address listed here. You'll need an
+            extension for whatever application you read mail with at the
+            forwarded address in order to read the messages. This is so the
+            receiving server can not view your mail in the same way that 
+            chainmail can't.
+          </div>
+        </div>
+      </fieldset>
+
       <ul class="button-group right">
         <li><button class="button alert">Discard</button></li>
-        <li><button class="button">Save</button></li>
+        <li><input value="Save" type="submit" class="button" /></li>
       </ul>
     </form>
   </div>
-
 {% endblock %}
 
 {% block js %}

@@ -38,8 +38,8 @@
   (route/not-found "<h1>Page not found</h1>"))
 
 (def app
-  (-> #'url-routes 
+  (-> #'url-routes
     (wrap-reload '(views))
-    wrap-session 
+    wrap-session
     wrap-params
     wrap-keyword-params))

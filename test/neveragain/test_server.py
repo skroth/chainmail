@@ -15,9 +15,13 @@ def random_tag(l, dtag):
 
 
 
+m = None
 def generate_pasta_message(ow_fields):
   """Have a little fun and make pretend, unique, emails for testing. Will use
   nltk for some goofing around if we can."""
+  global m
+  if m: return m
+
   fields = {
     'message_id': '<911885125.6648512@neveraga.in>',
     'date': (datetime.datetime.now(pytz.timezone('US/Pacific')) - datetime.timedelta(days=random.randint(0,7), hours=random.randint(0,24), minutes=random.randint(0,60))).strftime('%a, %d %b %Y %H:%M:%S %Z'),
@@ -59,7 +63,7 @@ Best regards on the matter of %s %s,
   for f in ow_fields:
     fields[f] = ow_fields[f]
 
-  return ''.join([
+  m = ''.join([
       'Message-ID: %(message_id)s\r\n',
       'Date: %(date)s\r\n',
       'From: %(from)s\r\n',
@@ -73,6 +77,8 @@ Best regards on the matter of %s %s,
       '%(body)s\r\n',
       '\r\n.\r\n'
     ]) % fields
+
+  return m
 
 scripts = {
   'relay_script': [

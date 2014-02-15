@@ -147,6 +147,12 @@
               tag-ids))
             {:status 200 :body "Hail! Thy quest succeedeth!"}))))))
 
+(defn register
+  ([request]
+    (register message settings/db))
+  ([request db]
+   nil))
+
 (defn index [request]
   (if (:user (:session request))
     (make-redirect "/inbox")
