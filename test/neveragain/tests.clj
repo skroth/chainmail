@@ -9,12 +9,14 @@
     (java.lang String)
     (java.security KeyPair PublicKey PrivateKey)
     (org.bouncycastle.crypto.params KeyParameter)
-    (org.bouncycastle.crypto.engines AESFastEngine)))
+    (org.bouncycastle.crypto.engines AESFastEngine)
+    (neveragain CustomPublicKey)))
 
 (deftest test-key-pair-generation
   (let [kp (common/gen-key-pair)]
     (is (instance? KeyPair kp))
-    (is (re-matches #"\d+/\d+/\d+" (common/serialize-pub-key (.getPublic kp))))))
+    (is (instance? CustomPublicKey
+                   (common/deserialize-pub-key (common/serialize-pub-key (.getPublic kp)))))))
 
 (deftest test-aes-key-generation
   (let [key (common/gen-aes-key)]
@@ -68,6 +70,7 @@
   (loop [[[s is-dot is-common] & remaining ] [["thisisatest" true true]
                                               ["so.is.this" true true]
                                               ["but$this~isn't" true false]
+                                              [".cant.start.with.dots" false false]
                                               ["this(one)should)(fail" false false]
                                               ["unicode is for commies" false false]
                                               ["( ͡° ͜ʖ ͡°)" false false]]]

@@ -4,10 +4,10 @@
     [clojure.string :as string]))
 
 (defn atom? [s]
-  (boolean (re-matches #"[a-zA-Z0-9!#$%&'*+-/=?^_`{|}~]+" s)))
+  (boolean (re-matches #"[a-zA-Z0-9!#$%&'*+\-/=?^_`{|}~]+" s)))
 
 (defn dot-atom? [s]
-  (boolean (re-matches #"[a-zA-Z0-9!#$%&'*+-/=?^_`{|}~][.a-zA-Z0-9!#$%&'*+-/=?^_`{|}~]*" s)))
+  (boolean (re-matches #"[a-zA-Z0-9!#$%&'*+\-/=?^_`{|}~][.a-zA-Z0-9!#$%&'*+-/=?^_`{|}~]*" s)))
 
 (defn common-atom? [s]
   (boolean (re-matches #"[a-zA-Z0-9][.a-zA-Z0-9]*" s)))

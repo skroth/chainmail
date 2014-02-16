@@ -90,14 +90,23 @@
       (.generateKeyPair kpg))))
 
 (defn serialize-pub-key [key]
-  "Encodes a ElGamal public key as base 10 integers in a '/' deliniated string."
-  (let [spec (.getParams key)]
-    (string/join "/" [(.getY key) (.getP spec) (.getG spec)])))
+  "Encodes a ElGamal public key in JSON with BigIntegers being stored in base64."
+  (let [spec (.getParams key)
+        raw-key {:y (.getY key)
+                 :p (.getP spec)
+                 :g (.getG spec)}]
+    (json/write-str
+     (reduce
+      (fn [m [k v]]
+        (assoc m k
+               (apply str (map char (b64/encode (.toByteArray v))))))
+      {}
+      raw-key))))
 
 (defn deserialize-pub-key [key]
-  "Takes an ascii/utf-8 string in the format 'y/p/g' (where each letter
-  encodes a big integer) and creates an ElGamalPublicKeySpec."
-  (let [[y p g] (map (fn [x] (BigInteger. x)) (string/split key #"/"))]
+  "Inverse of serialize-pub-key."
+  (let [reconstitute (fn [k v] (BigInteger. (b64/decode (.getBytes v "UTF-8"))))
+        {:strs [y p g]} (json/read-str key :value-fn reconstitute)]
     (CustomPublicKey. (ElGamalPublicKeySpec. y (ElGamalParameterSpec. p g)))))
 
 (defn block-proc [cipher message]

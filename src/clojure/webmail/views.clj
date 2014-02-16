@@ -2,8 +2,9 @@
   (:use compojure.core
     ring.util.response)
   (:require
-    (neveragain [common :refer :all])
-    (neveragain [settings :as settings])
+    (neveragain [common :refer :all]
+                [settings :as settings]
+                [addresses :as addresses])
     (clojure.java [jdbc :refer :all])
     (clojure.data [json :as json])
     (clojure.data.codec [base64 :as b64])
@@ -150,13 +151,38 @@
 (defn register
   ([request]
     (register message settings/db))
-  ([request db]
+  ([{{:strs [local-part domain full-name password]} :params} db]
+   (let [proposed-address (str address "@" domain)])
+    (json/write-str
+     (cond
+      (not (contains? settings/controlled-domains domain))
+       {:status "failure"
+        :reason "Hark! We don't hand out addresses on that domain!"}
+      (not (:valid (addresses/parse-addr-spec proposed-address)))
+       {:status "failure"
+        :reason "Hark! Thou hath failed to specify a valid address!"}
+      (has-account-here proposed-address db)
+       {:status "failure"
+        :reason "Hark! Some knave hath heretofore snatched thine address!"}
+      :else
+       (let [key-pair (gen-key-pair)
+             pub-key (.getPublic key-pair)
+             priv-key (.getPrivate key-pair)]
+        (do (insert! db :users {:realname full-name
+                                :address address
+                                :hostname domain
+                                :hashword (hash-pass password)
+                                :elgamal_pub_key (serialize-pub-key pub-key)})
+           {:status "success"}))
+
+
+    )
    nil))
 
 (defn index [request]
-  (if (:user (:session request))
-    (make-redirect "/inbox")
-    (make-redirect "/login")))
+ (if (:user (:session request))
+  (make-redirect "/inbox")
+  (make-redirect "/login")))
 
 (defn list-messages
   ([request]

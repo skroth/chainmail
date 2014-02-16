@@ -1,7 +1,7 @@
 -- Password is "passthesaltpls" hashed with a salt work factor of 10
 -- Corrosponding private key X value is 58209383703813223294054720125890093284011777773867654071365836136169085519840
-INSERT INTO users ("realname", "address", "hostname", "hashword", "elgamal_pub_key") 
-  VALUES ("Ryan Jenkins", "lanny", "neveraga.in", "$2a$10$0GUmnZ1BIFCl/p6XwT39cO5dnU7PWxp8bI7/yxN8YDyLzWEewAQqK", "46251119247585834225564638688931610027118776535245747105522075750332935239396/88634683667557540618540710908030166277010545432698743971879726483903340246603/79745105114390599660198348710397771952708880811311357501118084427213436289403");
+INSERT INTO users ("realname", "address", "hostname", "hashword", "elgamal_pub_key")
+  VALUES ("Ryan Jenkins", "lanny", "neveraga.in", "$2a$10$0GUmnZ1BIFCl/p6XwT39cO5dnU7PWxp8bI7/yxN8YDyLzWEewAQqK", "{""g"":""ALBOIUfGbqEEvbDKnF7\/r7eTEt6efk98QkxG1j5mdwF7"",""p"":""AMP1dAI9SD68MgN50pCx8qtZUYywqflFLCc0jBbR3nZL"",""y"":""ZkE0r+Sqj\/Q9uLTwfSSredmZUaz01mPK0vZmbPrA9uQ=""}");
 
-INSERT INTO forwarding_directives ("destination_address", "owner_id") 
+INSERT INTO forwarding_directives ("destination_address", "owner_id")
   VALUES ("lan.rogers.book@gmail.com", 1);
