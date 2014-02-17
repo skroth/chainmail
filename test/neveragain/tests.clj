@@ -2,6 +2,7 @@
   (:require
     (clojure [test :refer :all])
     (clojure [string :as string])
+    (clojure.java [jdbc :as j])
     [clojure.data.codec.base64 :as b64]
     (neveragain [common :as common]
                 [addresses :as addresses]))
@@ -11,6 +12,20 @@
     (org.bouncycastle.crypto.params KeyParameter)
     (org.bouncycastle.crypto.engines AESFastEngine)
     (neveragain CustomPublicKey)))
+
+(def test-db {
+  :classname "org.sqlite.JDBC"
+  :subprotocol "sqlite"
+  :subname "test.db"})
+
+(j/db-do-commands test-db
+  (str
+    "PRAGMA writable_schema = 1;
+    delete from sqlite_master where type = 'table';
+    PRAGMA writable_schema = 0;
+    VACUUM;"
+    (slurp "src/clojure/neveragain/schema.sql")
+    (slurp "test/neveragain/testdata.sql")))
 
 (deftest test-key-pair-generation
   (let [kp (common/gen-key-pair)]
@@ -57,11 +72,12 @@
   (let [envl {:from "jimmy.hoffa@nowhere.mx"
               :recipients ["lanny@neveraga.in"]
               :data "Waddup amigo!"}
-        user (common/get-user-record "lanny@neveraga.in")
+        user (common/get-user-record "lanny@neveraga.in" test-db)
         res (common/rewrite-for-forwarding envl
                                            user
                                            "lan.rogers.book@gmail.com")]
     ; TODO: test something meaningful here, probably involving parsing
+    (println res)
     (is (seq res))
     (is (re-matches #"^[a-z]+@.+$" (:from res)))))
 

@@ -4,7 +4,8 @@
     (clojure.java [jdbc :refer :all])
     (clojure.data [json :as json])
     [clojure.data.codec.base64 :as b64]
-    (neveragain [settings :as settings]))
+    (neveragain [settings :as settings]
+                [addresses :as addresses]))
   (:import
     (neveragain CustomPublicKey)
     (java.net ServerSocket InetAddress Socket)
@@ -298,7 +299,7 @@
   (let [pub-key (deserialize-pub-key (:elgamal_pub_key user))
         [cipher-text enc-key iv] (encrypt-message (:data envl) pub-key)
         tutivillus (str "tutivillus@" (get-hostname))
-        headers {:Content-Transfer-Encoding "8bit"
+        headers {:Content-Transfer-Encoding "7bit"
                  :Content-Type "text/plain; charset=utf-8"
                  :Date (strftime "%a, %d %b %Y %H:%M:%S %Z" (Date.))
                  :From (str "Chainmail Mailer Daemon <" tutivillus ">")
@@ -327,8 +328,9 @@
   "Accepts an envelope and a single recipient, then acts as a SMTP client,
   transmitting the envelope, unmodified, to the host suggested by the
   recipient's address."
-  (let [hostname (get (string/split recipient #"@") 1)
-      mx-hosts (get-mx-hosts hostname)]
+  (let [recipient-addr (addresses/parse-address recipient)
+        hostname (:domain recipient-addr)
+        mx-hosts (get-mx-hosts hostname)]
     (loop [[[priority host] & remaining] mx-hosts]
       (println (str "Trying host " host))
       (let [conn (negotiate-socket host false)]
