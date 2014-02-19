@@ -150,34 +150,33 @@
 
 (defn register
   ([request]
-    (register message settings/db))
+    (register request settings/db))
   ([{{:strs [local-part domain full-name password]} :params} db]
-   (let [proposed-address (str address "@" domain)])
-    (json/write-str
-     (cond
-      (not (contains? settings/controlled-domains domain))
-       {:status "failure"
-        :reason "Hark! We don't hand out addresses on that domain!"}
-      (not (:valid (addresses/parse-addr-spec proposed-address)))
-       {:status "failure"
-        :reason "Hark! Thou hath failed to specify a valid address!"}
-      (has-account-here proposed-address db)
-       {:status "failure"
-        :reason "Hark! Some knave hath heretofore snatched thine address!"}
-      :else
-       (let [key-pair (gen-key-pair)
-             pub-key (.getPublic key-pair)
-             priv-key (.getPrivate key-pair)]
-        (do (insert! db :users {:realname full-name
-                                :address address
-                                :hostname domain
-                                :hashword (hash-pass password)
-                                :elgamal_pub_key (serialize-pub-key pub-key)})
-           {:status "success"}))
-
-
-    )
-   nil))
+   (json/write-str
+    (let [proposed-address (str local-part "@" domain)
+          parsed (addresses/parse-addr-spec proposed-address)]
+      (cond
+       (not (contains? settings/controlled-domains (:domain parsed)))
+        {:status "failure"
+         :reason "Hark! That address lieth not within thine lordly domain!"}
+       (not (:valid parsed))
+        {:status "failure"
+         :reason "Hark! Thou hath failed to specify a valid address!"}
+       (has-account-here proposed-address db)
+        {:status "failure"
+         :reason "Hark! Some knave hath heretofore snatched thine address!"}
+       :else
+        (let [key-pair (gen-key-pair)
+              pub-key (.getPublic key-pair)
+              priv-key (.getPrivate key-pair)]
+         (do (insert! db :users {:realname full-name
+                                 :address (:norm-box-name parsed)
+                                 :box_name (:box-name parsed)
+                                 :hostname (:domain parsed)
+                                 :hashword (hash-pass password)
+                                 :elgamal_pub_key (serialize-pub-key pub-key)}))
+         {:status "success"
+          :pub_key (json/read-str (serialize-pub-key pub-key))}))))))
 
 (defn index [request]
  (if (:user (:session request))

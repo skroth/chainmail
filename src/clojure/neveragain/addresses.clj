@@ -21,14 +21,19 @@
 (defn parse-addr-spec [s]
   (let [parts (string/split s #"@")
         local-part (string/join "@" (butlast parts))
+        [box-name sub-box] (string/split local-part #"\+" 2)
+        norm-box-name (string/replace box-name #"\." "")
         domain (last parts)]
-    {:valid (and (or (dot-atom? local-part)
-                     (quoted-string? local-part))
+    {:valid (and (or (dot-atom? box-name)
+                     (quoted-string? box-name))
                  (or (dot-atom? domain)
                      (domain-literal? domain)))
-     :warning (or (not (common-atom? local-part))
+     :warning (or (not (common-atom? box-name))
                   (not (common-atom? domain)))
      :local-part local-part
+     :box-name box-name
+     :sub-box sub-box
+     :norm-box-name norm-box-name
      :domain domain }))
 
 (defn name-addr? [s]

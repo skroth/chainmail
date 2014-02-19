@@ -39,10 +39,10 @@
 (deftest test-register
   (let [old-users-num (:n (first (j/query test-db
                                           ["SELECT COUNT(*) AS n FROM users"])))
-        req {:params {"address" "new.account"
+        req {:params {"local-part" "new.account"
                       "domain" "neveraga.in"
                       "password" "testpass"
-                      "realname" "New J. Account"}}
+                      "fullname" "New J. Account"}}
         res (json/read-str (views/register req)
                            :key-fn keyword)
         ; Try the same thing again to make sure we can't register a address/name
@@ -51,6 +51,7 @@
                                 :key-fn keyword)
         new-users-num (:n (first (j/query test-db
                                           ["SELECT COUNT(*) AS n FROM users"])))]
+    (println res)
     (is res)
     (is (= (- new-users-num old-users-num) 1))
     (is (:x (:pub_key res)))

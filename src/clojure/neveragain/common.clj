@@ -4,7 +4,8 @@
     (clojure.java [jdbc :refer :all])
     (clojure.data [json :as json])
     [clojure.data.codec.base64 :as b64]
-    (neveragain [settings :as settings]))
+    (neveragain [settings :as settings]
+                [addresses :as addresses]))
   (:import
     (neveragain CustomPublicKey)
     (java.net ServerSocket InetAddress Socket)
@@ -52,10 +53,11 @@
   ([address]
     (has-account-here address settings/db))
   ([address db]
-    (boolean
-      (query db (into [] (concat
-        ["SELECT 1 FROM users WHERE address=? AND hostname=?"]
-        (string/split address #"@")))))))
+   (let [parsed (addresses/parse-address address)]
+     (boolean
+      (query db ["SELECT 1 FROM users WHERE address=? AND hostname=?"
+                 (:norm-box-name parsed)
+                 (:domain parsed)])))))
 
 (defn hash-pass [password]
   (BCrypt/hashpw password (BCrypt/gensalt settings/salt-factor)))
@@ -370,3 +372,4 @@
             (dorun (for [{f-address :destination_address} directives]
               (relay-message (rewrite-for-forwarding envl user f-address)
                              f-address))))))))))
+

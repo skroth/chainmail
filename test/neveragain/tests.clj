@@ -65,6 +65,14 @@
     (is (seq res))
     (is (re-matches #"^[a-z]+@.+$" (:from res)))))
 
+(deftest test-has-account-here
+  ; Let's assume the test data has been loaded someone has the "lanny@neveraga.in" account
+  (is (common/has-account-here "lanny@neveraga.in"))
+  (is (not (common/has-account-here "fred@neveraga.in")))
+  (is (not (common/has-account-here "lanny@unregistereddoma.in")))
+  (is (common/has-account-here "l.a.nny@neveraga.in"))
+  (is (common/has-account-here "lanny+lol@neveraga.in")))
+
 ; Addresses stuff
 (deftest test-atom-recognition
   (loop [[[s is-dot is-common] & remaining ] [["thisisatest" true true]

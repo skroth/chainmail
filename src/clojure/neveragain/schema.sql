@@ -1,7 +1,8 @@
 CREATE TABLE users
 ( id INTEGER PRIMARY KEY,
   realname TEXT,
-  address TEXT,
+  address TEXT, -- normalized, must be unique with hostname, what we show to users and stick on outbound email
+  box_name TEXT, -- A local part of an address that must normalize to the `address` in the same row
   hostname TEXT,
   elgamal_pub_key TEXT,
   hashword TEXT,
