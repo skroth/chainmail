@@ -176,7 +176,18 @@
                                  :hashword (hash-pass password)
                                  :elgamal_pub_key (serialize-pub-key pub-key)}))
          {:status "success"
-          :pub_key (json/read-str (serialize-pub-key pub-key))}))))))
+          :key (json/read-str (serialize-key-pair key-pair))}))))))
+
+(defn address-available
+  ([request]
+    (address-available request settings/db))
+  ([{{address "address"} :params} db]
+   (if-not address
+     {:status 422
+      :body "Hark! Even I can not peer beyond the veil of missing `address` parameters!"}
+     (json/write-str
+      {:result (and (contains? settings/controlled-domains (:domain (addresses/parse-address address)))
+                    (not (has-account-here address db)))}))))
 
 (defn index [request]
  (if (:user (:session request))

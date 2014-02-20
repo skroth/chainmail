@@ -1,0 +1,219 @@
+{% extends "webmail/templates/base.html" %}
+
+{% block css %}
+<style>
+    small.error.warn {
+        background: #FFFF00;
+        color: #000;
+    }
+    small.error.available { background: #00FF00; }
+    input.available {
+        box-shadow: inset 0 0 10px rgb(73, 255, 204);
+        color: green;
+    }
+    input.taken {
+        color: red;
+        box-shadow: inset 0 0 10px rgb(245, 93, 93);
+    }
+    #key-container {
+        word-wrap: break-word;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="success-modal" class="reveal-modal" data-reveal>
+    <h2>Hail! Thou Art Successful!</h2>
+    <p>
+        Hail brave knight, you have succeded in thine quest to register an account,
+        we welcome you in our halls. Here are your keys to the kingdom. We've
+        loaded them upon thine trusty steed (your private key is saved in your
+        browser) but thou had best duplicate them as well, to keep under lock and
+        key.
+    </p>
+    <pre id="key-container"
+         class="panel"
+         data-bind="text: privKey"></pre>
+
+  <a class="button right"
+     data-bind="click: sally">
+      Sally Forth!
+  </a>
+</div>
+
+<h1>Regsiter</h1>
+<form data-bind="submit: $root.register">
+    <div class="columns small-12 medium-6 medium-push-6">
+        <p>
+            Hail brave knight! I sense thou seeketh passage though these gates and
+            and succor for thine wounds of lost privacy. Rest assured, wise and
+            weary soul, we have what thy seek. But first a trial! Prove thineself
+            brave knight, vanquish the foul registration form and claim that which
+            is rightfully yours!
+        </p>
+        <p>
+            Forsooth! The address thy seeketh is: <br />
+            <label>
+                <input disabled
+                       type="text"
+                       class="proposed-address error"
+                       data-bind="value: $root.proposedAddress,
+                                  css: {taken: !$root.addressAvailable(),
+                                        available: $root.addressAvailable()}">
+
+                <small class="error"
+                       data-bind="css: {available: $root.addressAvailable()},
+                                  text: $root.addressAvailable()?'Hail! It is available!'
+                                                                :'Hark! It is taken!'">
+                </small>
+            </label>
+        </p>
+    </div>
+
+    <div class="columns small-12 medium-6 medium-pull-6">
+        <label>
+            Full Name (optional)
+            <input type="text" name="full-name" data-bind="value: fullName" />
+        </label>
+        <label>
+            Address
+            <input type="text"
+                   name="local-part"
+                   data-bind="value: address,
+                              valueUpdate: 'input',
+                              css: {error: $root.addressError,
+                                    warn: $root.addressWarn}" />
+            <!-- ko if: $root.addressError() -->
+            <small class="error">invalid characters in address</small>
+            <!-- /ko -->
+
+            <!-- ko if: $root.addressWarn() -->
+            <small class="error warn">uncommon characters in address, may cause errors</small>
+            <!-- /ko -->
+        </label>
+        <label>
+            Domain
+            <select name="domain" data-bind="value: domain">
+                <option value="neveraga.in">neveraga.in</option>
+            </select>
+        </label>
+        <label>
+            Password
+            <input type="password"
+                   name="password"
+                   data-bind="value: password,
+                              valueUpdate: 'input',
+                              css: {error: $root.passwordError}" />
+
+            <!-- ko if: $root.passwordError() -->
+            <small class="error">password must be at least 6 characters</small>
+            <!-- /ko -->
+        </label>
+        <label>
+            Password (again)
+            <input type="password" name="password-again"
+                   data-bind="value: passwordAgain,
+                              valueUpdate: 'input',
+                              css: {error: $root.passwordAgainError}" />
+            <!-- ko if: $root.passwordAgainError() -->
+            <small class="error">passwords don't match</small>
+            <!-- /ko -->
+        </label>
+        <input type="submit" value="Regsiter" class="button"></input>
+    </div>
+</form>
+{% endblock %}
+
+{% block js %}
+<script type="text/javascript" src="/js/knockout-3.0.0.js"></script>
+<script type="text/javascript">
+    var lpRegex = /^[a-zA-Z0-9!#$%&'*+\-\/=?^_`{|}~][.a-zA-Z0-9!#$%&'*+-\/=?^_`{|}~]*$/,
+        commonAddrRegex = /^[a-zA-Z0-9][a-zA-Z0-9.]*$/
+
+    function ViewModel() {
+        var self = this
+
+        self.fullName = ko.observable("")
+        self.address = ko.observable("")
+        self.domain = ko.observable()
+        self.password = ko.observable("")
+        self.passwordAgain = ko.observable("")
+        self.addressAvailable = ko.observable(true)
+        self.privKey = ko.observable("No key here!")
+
+        self.proposedAddress = ko.computed(function() {
+            return self.address() + '@' + self.domain()
+        })
+        self.scrib = ko.computed(function() {
+            // Just a throttled way to subscribe to `proposedAddress`
+            var params = {address: self.proposedAddress()}
+            $.getJSON('/address-available', params, function(data) {
+                self.addressAvailable(data.result)
+            })
+
+            return null
+        }).extend({ throttle: 500 })
+
+        self.addressError = function() {
+            return (!!self.address() &&
+                    !self.address().match(lpRegex))
+        }
+        self.addressWarn = function() {
+            return (!!self.address() &&
+                    !self.address().match(commonAddrRegex) &&
+                    !self.addressError())
+        }
+        self.passwordError = function() {
+            return (!!self.password() &&
+                    !(self.password().length >= 6))
+        }
+        self.passwordAgainError = function() {
+            return (!!self.passwordAgain() &&
+                    !(self.passwordAgain() == self.password()))
+        }
+        self.valid = ko.computed(function() {
+            return (self.address() &&
+                    self.domain() &&
+                    self.password() &&
+                    self.passwordAgain() &&
+                    self.addressAvailable() &&
+                    !self.addressError() &&
+                    !self.passwordError() &&
+                    !self.passwordAgainError())
+        })
+        self.register = function() {
+            if (!self.valid()) {
+                alert("Hark! Thy hath not yet fully vanquished thy foe!")
+                return
+            } else {
+                var params = {
+                    "local-part": self.address(),
+                    "domain": self.domain(),
+                    "full-name": self.fullName(),
+                    "password": self.password()
+                }
+
+                $.post('/register', params, function(data) {
+                    data = JSON.parse(data)
+                    if (data.status != "success") {
+                        alert('Hark knave! The server denies thee audience, the stated reasons being: '
+                              + data.reason)
+                        return
+                    } else {
+                        localStorage.setItem('cmPrivKey', JSON.stringify(data.key))
+                        self.privKey(JSON.stringify(data.key))
+                        $('#success-modal').foundation('reveal', 'open')
+                    }
+                })
+            }
+        }
+        self.sally = function() {
+            document.location.href = "/"
+        }
+    }
+
+    var viewModel = new ViewModel()
+    ko.applyBindings(viewModel)
+    $(document).foundation()
+</script>
+{% endblock %}

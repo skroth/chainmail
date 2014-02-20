@@ -55,9 +55,10 @@
   ([address db]
    (let [parsed (addresses/parse-address address)]
      (boolean
-      (query db ["SELECT 1 FROM users WHERE address=? AND hostname=?"
-                 (:norm-box-name parsed)
-                 (:domain parsed)])))))
+      (first
+       (query db ["SELECT 1 FROM users WHERE address=? AND hostname=?"
+                  (:norm-box-name parsed)
+                  (:domain parsed)]))))))
 
 (defn hash-pass [password]
   (BCrypt/hashpw password (BCrypt/gensalt settings/salt-factor)))
@@ -90,6 +91,21 @@
     (let [kpg (KeyPairGenerator/getInstance  "ElGamal" "BC")]
       (.initialize kpg key-length (SecureRandom.))
       (.generateKeyPair kpg))))
+
+(defn serialize-key-pair [key-pair]
+  "Encodes a ElGamal key pair in JSON with BigIntegers being stored in base64."
+  (let [pub-key (.getPublic key-pair)
+        priv-key (.getPrivate key-pair)]
+    (json/write-str
+     (reduce
+      ; b64 encode the 4 BigIntegers that make up the keypair
+      (fn [m [key val]]
+        (assoc m key (apply str (map char (b64/encode (.toByteArray val))))))
+        {}
+        {:p (.getP (.getParams pub-key))
+         :g (.getG (.getParams pub-key))
+         :y (.getY pub-key)
+         :x (.getX priv-key)}))))
 
 (defn serialize-pub-key [key]
   "Encodes a ElGamal public key in JSON with BigIntegers being stored in base64."
