@@ -1,21 +1,21 @@
 (ns neveragain.core
-  (:require 
+  (:require
     (clojure [string :as string])
-    (neveragain 
-      [common :refer :all] 
+    (neveragain
+      [common :refer :all]
       [settings :as settings]
       rfc auth tls))
-  (:import 
+  (:import
     (java.util.concurrent Executors)
     (javax.net.ssl SSLSocket)
     (java.net ServerSocket InetAddress)
-     (java.util.concurrent Executors)
+    (java.util.concurrent Executors)
     (java.io PrintWriter)
     (java.util Scanner NoSuchElementException)))
 
 (defn rewrite-ehlo [v-map ext-list]
   "Returns a verb handler map with an EHLO verb reflecting ext-list"
-  (assoc v-map "EHLO" 
+  (assoc v-map "EHLO"
     (fn [msg conn envl]
       (let [exts (filter (fn [ext] (boolean (:advertise ext))) ext-list)
           final (last exts)
@@ -37,13 +37,13 @@
 ])
 
 (def verb-handler-map (rewrite-ehlo (reduce
-  (fn [v-map extension] 
-    ((:install-handlers extension) v-map)) 
+  (fn [v-map extension]
+    ((:install-handlers extension) v-map))
   {} enabled-extensions) enabled-extensions))
 
 (defn respond [conn msg envl]
   ; Pop out the verb, force uppercase, execute corrosponding function
-  ((get 
+  ((get
     verb-handler-map
     (string/upper-case (get (string/split msg #"\s") 0))
     (fn [msg conn envl]
@@ -53,8 +53,8 @@
   ) msg conn envl))
 
 (defn handle-conn [conn]
-  ; For the mistified check out the actual spec followed here 
-  ; [http://tools.ietf.org/html/rfc2821] and this invaluable guide 
+  ; For the mistified check out the actual spec followed here
+  ; [http://tools.ietf.org/html/rfc2821] and this invaluable guide
   ; [http://cr.yp.to/smtp.html]
   (write-out (:out conn) (str "220 " (get-hostname) " Neveragain SMTP Service"))
 
@@ -63,13 +63,13 @@
   ; this way modify session state. If a handler function retuns nil instead we
   ; take that to mean this sessions has ended.
   (loop [envl {} inner-conn conn]
-    (let [msg (try 
+    (let [msg (try
         (.next (:in inner-conn)) ; Could happen if the client closed the connection.
         (catch NoSuchElementException e nil))]
       (if (= msg nil)
         nil
         (let [response (respond inner-conn msg envl)]
-          (cond 
+          (cond
             (= (type response) SSLSocket) (recur envl response)
             (= response nil) nil
             :else (recur response inner-conn)))))))

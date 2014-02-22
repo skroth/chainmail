@@ -44,10 +44,11 @@
   ([address]
     (get-user-record address settings/db))
   ([address db]
-    (first
-      (query db (into [] (concat
-        ["SELECT * FROM users WHERE address=? AND hostname=?"]
-        (string/split address #"@")))))))
+   (let [parsed (addresses/parse-address address)]
+     (first
+      (query db ["SELECT * FROM users WHERE address=? AND hostname=? LIMIT 1;"
+                 (:norm-box-name parsed)
+                 (:domain parsed)])))))
 
 (defn has-account-here
   ([address]

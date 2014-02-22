@@ -11,3 +11,5 @@ pom.xml.asc
 *.sublime-project
 *.sublime-workspace
 *.db
+*.DS_Store
+*.swp
