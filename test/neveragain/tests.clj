@@ -14,19 +14,24 @@
     (org.bouncycastle.crypto.engines AESFastEngine)
     (neveragain CustomPublicKey)))
 
-(def test-db {
-  :classname "org.sqlite.JDBC"
-  :subprotocol "sqlite"
-  :subname "test.db"})
+(defn standard-fixture [f]
+  (def test-db {
+    :classname "org.sqlite.JDBC"
+    :subprotocol "sqlite"
+    :subname "test.db"})
 
-(j/db-do-commands test-db
-  "PRAGMA writable_schema = 1;
-   delete from sqlite_master where type = 'table';
-   PRAGMA writable_schema = 0;
-   VACUUM;")
+  (j/db-do-commands test-db
+    "PRAGMA writable_schema = 1;
+     delete from sqlite_master where type = 'table';
+     PRAGMA writable_schema = 0;
+     VACUUM;")
 
-(j/db-do-commands test-db [(slurp "test/neveragain/testdata.sql")])
-(j/db-do-commands test-db [(slurp "src/clojure/neveragain/schema.sql")])
+  (j/db-do-commands test-db [(slurp "test/neveragain/testdata.sql")])
+  (j/db-do-commands test-db [(slurp "src/clojure/neveragain/schema.sql")])
+
+  (f))
+
+(use-fixtures :once standard-fixture)
 
 (deftest test-key-pair-generation
   (let [kp (common/gen-key-pair)]
@@ -157,3 +162,29 @@
     (is (re-matches #"^OK.*" (:response res-three)))
     (is (= (:state (:session res-three)) "authenticated"))
     (is (:user (:session res-three)))))
+
+(deftest test-imap-select
+  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+        case-one (imap/select "lanny@neveraga.in" 
+                              {:user user :state "authenticated"}
+                              test-db)
+        case-two (imap/select "lanny@neveraga.in" 
+                              {:user  nil :state nil}
+                              test-db)
+        case-three (imap/select "frederick@neveraga.in" 
+                              {:user user :state "authenticated"}
+                              test-db)]
+    (is (sequential? (:response case-one)))
+    (is (some (fn [x] (re-matches #"\d+ EXISTS" x)) 
+              (:response case-one)))
+    (is (some (fn [x] (re-matches #"\d+ RECENT" x)) 
+              (:response case-one)))
+    (is (some (fn [x] (re-matches #"OK \[UNSEEN \d+\].*" x)) 
+              (:response case-one)))
+    (is (some (fn [x] (re-matches #"FLAGS \(.*\)" x)) 
+              (:response case-one)))
+    (is (re-matches #"^OK.*" (last (:response case-one))))
+    (is (re-matches #"^BAD.*" (:response case-two)))
+    (is (re-matches #"^NO.*" (:response case-three)))))
+
+;(standard-fixture test-imap-select)

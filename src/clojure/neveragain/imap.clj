@@ -11,22 +11,49 @@
 
 (defn wrap-pure-imap-verb [func]
   (fn [tag conn args session]
-    (let [{resp :response session :session} {}]
+    (let [{resp :response session :session} (func args session)]
       (cond
        (sequential? resp)
          (loop [[line & remaining] resp]
            (if (not (empty? remaining))
              (do
-               (common/write-out (:out conn)
-                                 (str "* " resp "\r\n"))
+               (.println (:out conn)
+                         (str "* " line "\r\n"))
                (recur remaining))
-             (common/write-out (:out conn)
-                               (str tag " " resp "\r\n"))))
+             (do
+               (.println (:out conn)
+                         (str tag " " line "\r\n"))
+               (.flush (:out conn)))))
 
-       (not resp)
+       (not (empty? resp))
          (common/write-out (:out conn)
                            (str tag " " resp "\r\n")))
       session)))
+
+(defn wrap-required-state [state-name func]
+  "Not in use any more"
+  (fn [args session]
+    (if-not (= (:state session) state-name)
+      {:response (str "BAD This command requires the `" state-name "` state.")
+       :session session}
+      (func args session))))
+
+(defmacro require-state 
+  "Wraps a pure verb handler to prevent the handler from being executed if 
+  `(:state session)`, as per the handlers's binding, is not equal to 
+  `state-name`"
+  [state-name exp]
+  (let [[dsym fname [func & airities]] (macroexpand exp)
+        session-sym 'session]
+    (list dsym fname
+      (conj 
+        (for [[sig & body] airities]
+          `(~sig
+             (if-not (= (:state ~session-sym) ~state-name)
+               {:response "BAD This command requires the `authenticated` state."
+                :session ~session-sym}
+               (do ~@body))))
+        func))))
 
 (defn noop [args session]
   (if args
@@ -63,3 +90,73 @@
              {:response "OK LOGIN successful."
               :session (merge session {:user user
                                        :state "authenticated"})}))))))
+
+(def inbox-count-sql "SELECT COUNT(*) AS count 
+                      FROM messages 
+                      WHERE recipient_id = ?;")
+
+(def recent-count-sql "SELECT COUNT(*) AS count 
+                       FROM messages 
+                       INNER JOIN tags ON
+                         messages.id = tags.message_id
+                       WHERE
+                         tags.name = \"\\Recent\" AND
+                         messages.recipient_id = ?;")
+
+; All messages in a box without the \Seen tag on them
+(def unread-count-sql "SELECT COUNT(*) AS count FROM messages 
+                       LEFT OUTER JOIN tags ON 
+                         messages.id = tags.message_id AND 
+                         tags.name=\"\\Seen\" 
+                       WHERE 
+                         tags.id IS NULL AND
+                         messages.recipient_id = ?;")
+
+(def first-unread-seq-num-sql "SELECT seq_num FROM messages 
+                               LEFT OUTER JOIN tags ON 
+                                 messages.id = tags.message_id AND 
+                                 tags.name=\"\\Seen\" 
+                               WHERE 
+                                 tags.id IS NULL AND
+                                 messages.recipient_id = ?
+                               ORDER BY seq_num ASC
+                               LIMIT 1;")
+
+(def flags-in-mailbox "SELECT DISTINCT name FROM tags 
+                       WHERE owner_id = ?;")
+
+
+
+(require-state "authenticated"
+  (defn select 
+    ([args session]
+     (select args session settings/db))
+    ([args session db]
+     ; Users only have one mailbox, so we don't make the user/mailbox distinction
+     (let [selected-user (common/get-user-record args db)]
+       (cond
+         (not selected-user) 
+           {:response "NO Mailbox does not exist."
+            :session session}
+         (not (= (:id selected-user) (:id (:user session))))
+           {:response "NO That's not your mailbox."
+            :session session}
+         :else 
+          {:response
+            [(str (:count (first (j/query db [inbox-count-sql 
+                                              (:id selected-user)])))
+                  " EXISTS")
+             (str (:count (first (j/query db [recent-count-sql 
+                                              (:id selected-user)])))
+                  " RECENT")
+             (format "OK [UNSEEN %d]"
+                     (:seq_num (first (j/query db [first-unread-seq-num-sql 
+                                                   (:id selected-user)]))))
+             (format "FLAGS (%s)"
+                     (string/join ", "
+                       (map :name 
+                            (j/query db [flags-in-mailbox
+                                         (:id selected-user)]))))
+             "OK SELECT command complete"]
+           :session (assoc session :selected-box selected-user) })))))
+

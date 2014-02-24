@@ -29,6 +29,7 @@
 (Security/addProvider (new BouncyCastleProvider))
 
 (defn write-out [out-writer message]
+  "Write a line to the socket (or any print writer) and flush."
   (.println out-writer (str message "\r"))
   (.flush out-writer))
 
@@ -41,6 +42,8 @@
   (.getHostName (InetAddress/getLocalHost)))
 
 (defn get-user-record
+  "Takes a string representing a single address and returns the full record of
+  the user holding that mailbox."
   ([address]
     (get-user-record address settings/db))
   ([address db]

@@ -5,3 +5,6 @@ INSERT INTO users ("realname", "address", "hostname", "hashword", "elgamal_pub_k
 
 INSERT INTO forwarding_directives ("destination_address", "owner_id")
   VALUES ("lan.rogers.book@gmail.com", 1);
+
+INSERT INTO messages (data, recv_date, recipient_id, aes_key, pub_key, iv)
+  VALUES ("", 43, 1, "lol", "no key", "here");
