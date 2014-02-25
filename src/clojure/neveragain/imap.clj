@@ -166,7 +166,8 @@
                                  (string/join ", "))]
              ; We just told the user about all those messages, so clear the
              ; /Recent flags
-             (j/execute! db [clear-recent-sql user-id])
+             (if-not (:read-only session)
+               (j/execute! db [clear-recent-sql user-id]))
 
              ; And give them our response
              {:response [(format "%d EXISTS" exists-count)
@@ -174,4 +175,13 @@
                          (format "OK [UNSEEN %d]" unseen-seq-num)
                          (format "FLAGS (%s)" flags-list)
                          "OK SELECT command complete"]
-              :session (assoc session :selected-box selected-user) }))))))
+              :session (merge session {:selected-box selected-user
+                                       :state "selected"})}))))))
+
+(require-state "authenticated"
+  (defn examine 
+    ([args session]
+     (examine args session settings/db))
+    ([args session db]
+     (select args (assoc session :read-only true) db))))
+

@@ -183,8 +183,19 @@
               (:response case-one)))
     (is (some (fn [x] (re-matches #"FLAGS \(.*\)" x)) 
               (:response case-one)))
+    (is (= (-> case-one :session :state) "selected"))
     (is (re-matches #"^OK.*" (last (:response case-one))))
     (is (re-matches #"^BAD.*" (:response case-two)))
     (is (re-matches #"^NO.*" (:response case-three)))))
+
+(deftest test-imap-examine
+  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+        case-one (imap/examine "lanny@neveraga.in" 
+                               {:user user :state "authenticated"}
+                               test-db)]
+    (is (= (-> case-one :session :state) "selected"))
+    (is (= (-> case-one :session :read-only) true))
+    (is (some (fn [x] (re-matches #"\d+ RECENT" x)) 
+              (:response case-one)))))
 
 ;(standard-fixture test-imap-select)
