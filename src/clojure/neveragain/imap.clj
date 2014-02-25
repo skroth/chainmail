@@ -103,6 +103,11 @@
                          tags.name = \"\\Recent\" AND
                          messages.recipient_id = ?;")
 
+(def clear-recent-sql "DELETE FROM tags
+                       WHERE
+                         owner_id = ? AND
+                         name = \"\\Recent\";")
+
 ; All messages in a box without the \Seen tag on them
 (def unread-count-sql "SELECT COUNT(*) AS count FROM messages 
                        LEFT OUTER JOIN tags ON 
@@ -142,21 +147,31 @@
            {:response "NO That's not your mailbox."
             :session session}
          :else 
-          {:response
-            [(str (:count (first (j/query db [inbox-count-sql 
-                                              (:id selected-user)])))
-                  " EXISTS")
-             (str (:count (first (j/query db [recent-count-sql 
-                                              (:id selected-user)])))
-                  " RECENT")
-             (format "OK [UNSEEN %d]"
-                     (:seq_num (first (j/query db [first-unread-seq-num-sql 
-                                                   (:id selected-user)]))))
-             (format "FLAGS (%s)"
-                     (string/join ", "
-                       (map :name 
-                            (j/query db [flags-in-mailbox
-                                         (:id selected-user)]))))
-             "OK SELECT command complete"]
-           :session (assoc session :selected-box selected-user) })))))
+           (let [user-id (:id selected-user)
+                 exists-count (->> [inbox-count-sql user-id]
+                                   (j/query db)
+                                   first
+                                   :count)
+                 recent-count (->> [recent-count-sql user-id]
+                                   (j/query db)
+                                   first
+                                   :count)
+                 unseen-seq-num (->> [first-unread-seq-num-sql user-id]
+                                     (j/query db)
+                                     first
+                                     :seq_num)
+                 flags-list (->> [flags-in-mailbox user-id]
+                                 (j/query db)
+                                 (map :name)
+                                 (string/join ", "))]
+             ; We just told the user about all those messages, so clear the
+             ; /Recent flags
+             (j/execute! db [clear-recent-sql user-id])
 
+             ; And give them our response
+             {:response [(format "%d EXISTS" exists-count)
+                         (format "%d RECENT" recent-count)
+                         (format "OK [UNSEEN %d]" unseen-seq-num)
+                         (format "FLAGS (%s)" flags-list)
+                         "OK SELECT command complete"]
+              :session (assoc session :selected-box selected-user) }))))))
