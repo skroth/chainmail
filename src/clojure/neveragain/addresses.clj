@@ -19,7 +19,9 @@
 (defn strict-name-addr? [s] false)
 
 (defn parse-addr-spec [s]
-  (let [parts (string/split s #"@")
+  (let [parts (-> s
+                  (string/lower-case)
+                  (string/split #"@"))
         local-part (string/join "@" (butlast parts))
         [box-name sub-box] (string/split local-part #"\+" 2)
         norm-box-name (string/replace box-name #"\." "")
@@ -34,7 +36,21 @@
      :box-name box-name
      :sub-box sub-box
      :norm-box-name norm-box-name
+     :norm-addr (str norm-box-name "@" domain)
      :domain domain }))
+
+(defn c-addr [user-record]
+  "Takes a row from the `users` table and returns the canonical form of the
+   address point to that user's mailbox"
+  (format "%s@%s" (:box_name user-record) (:hostname user-record)))
+
+(defn addr-equality [addr-one addr-two]
+  "Accepts two string, parses them, and returns true if they both identify the
+   same mailbox, false otherwise."
+  (let [parsed-one (parse-addr-spec addr-one)
+        parsed-two (parse-addr-spec addr-two)]
+    (and (apply = (map :norm-box-name [parsed-one parsed-two]))
+         (apply = (map :domain [parsed-one parsed-two])))))
 
 (defn name-addr? [s]
   "In addition to what we find in the spec, we consider space to be a valid

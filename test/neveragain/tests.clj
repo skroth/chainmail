@@ -111,6 +111,7 @@
   (loop [[[s v w l d] & remaining ] [
           ["lan.rogers.book@gmail.com" true false "lan.rogers.book" "gmail.com"]
           ["lanny@neveraga.in" true false "lanny" "neveraga.in"]
+          ["YHWH@God.ng" true false "yhwh" "god.ng"]
           ["i~am~a~god@north.west" true true "i~am~a~god" "north.west"]
           ["not a valid@address" false true -1 -1]]]
     (is (= (:valid (addresses/parse-address s)) v))
@@ -121,6 +122,22 @@
       (is (= (:domain (addresses/parse-address s)) d)))
 
     (if (seq? remaining) (recur remaining) nil)))
+
+(deftest test-address-equality
+  (loop [[[a1 a2 e] & remaining]
+         [["lan.rogersbook@gmail.com" "lan.rogers.book@gmail.com" true]
+          ["lanny+subbox@neveraga.in" "lanny@neveraga.in" true]
+          ["lanny@neveraga.in" "lanny@gmail.com" false]
+          ["YHWH@dieties.co.uk" "yhwh@dieties.co.uk" true]
+          ["ted@socrates.net" "bill@plato.net" false]]]
+    (is (= (addresses/addr-equality a1 a2) e))
+    (if remaining (recur remaining))))
+
+(deftest test-c-addr
+  (is (= (addresses/c-addr {:box_name "lanny"
+                            :hostname "neveraga.in"})
+         "lanny@neveraga.in")))
+
 
 ; IMAP stuff
 (deftest test-imap-noop
@@ -197,5 +214,39 @@
     (is (= (-> case-one :session :read-only) true))
     (is (some (fn [x] (re-matches #"\d+ RECENT" x)) 
               (:response case-one)))))
+
+(deftest test-imap-create
+  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+        case-one (imap/create "" {} test-db)
+        case-two (imap/create "" {:state "authenticated" :user user} test-db)]
+    (is (= (:session case-one) {}))
+    (is (re-matches #"^BAD.*" (:response case-one)))
+    (is (re-matches #"^NO.*" (:response case-two)))))
+
+(deftest test-imap-delete
+  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+        case-one (imap/delete "" {} test-db)
+        case-two (imap/delete "" {:state "authenticated" :user user} test-db)]
+    (is (= (:session case-one) {}))
+    (is (re-matches #"^BAD.*" (:response case-one)))
+    (is (re-matches #"^NO.*" (:response case-two)))))
+
+(deftest test-imap-subscribe
+  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+        case-one (imap/subscribe "lanny@neveraga.in" 
+                                 {:state "authenticated" 
+                                  :user user
+                                  :subscriptions #{}}
+                                 test-db)
+        case-two (imap/subscribe "YHWH@neveraga.in"
+                                 {:state "authenticated" 
+                                  :user user
+                                  :subscriptions #{}}
+                                 test-db)]
+    (is (re-matches #"BAD.*" (:response case-two)))
+    (is (re-matches #"OK.*" (:response case-one)))
+    (is (empty? (-> case-two :session :subscriptions)))
+    (is (not (empty? (-> case-one :session :subscriptions))))
+    (is (= (-> case-one :session :subscriptions first) "lanny@neveraga.in"))))
 
 ;(standard-fixture test-imap-select)

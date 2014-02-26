@@ -40,17 +40,20 @@
 
 (defmacro require-state 
   "Wraps a pure verb handler to prevent the handler from being executed if 
-  `(:state session)`, as per the handlers's binding, is not equal to 
-  `state-name`"
-  [state-name exp]
+  `(:state session)`, as per the handlers's binding, is not equal in the 
+  `ok-states` hash set."
+  [ok-states exp]
   (let [[dsym fname [func & airities]] (macroexpand exp)
         session-sym 'session]
     (list dsym fname
       (conj 
         (for [[sig & body] airities]
           `(~sig
-             (if-not (= (:state ~session-sym) ~state-name)
-               {:response "BAD This command requires the `authenticated` state."
+             (if-not (contains? ~ok-states (:state ~session-sym))
+               {:response (format (str "BAD This command requires one of the "
+                                       "following states: %s")
+                                  (string/join ", " ~ok-states))
+                              
                 :session ~session-sym}
                (do ~@body))))
         func))))
@@ -70,6 +73,7 @@
                 "OK LOGOUT complete."]
      :session nil}))
 
+(require-state #{nil}
 (defn login 
   ([args session]
    (login args session settings/db))
@@ -89,7 +93,7 @@
             :else
              {:response "OK LOGIN successful."
               :session (merge session {:user user
-                                       :state "authenticated"})}))))))
+                                       :state "authenticated"})})))))))
 
 (def inbox-count-sql "SELECT COUNT(*) AS count 
                       FROM messages 
@@ -132,7 +136,7 @@
 
 
 
-(require-state "authenticated"
+(require-state #{"authenticated" "selected"}
   (defn select 
     ([args session]
      (select args session settings/db))
@@ -178,10 +182,48 @@
               :session (merge session {:selected-box selected-user
                                        :state "selected"})}))))))
 
-(require-state "authenticated"
+(require-state #{"authenticated" "selected"}
   (defn examine 
     ([args session]
      (examine args session settings/db))
     ([args session db]
      (select args (assoc session :read-only true) db))))
 
+
+(require-state #{"authenticated" "selected"}
+  (defn create
+    ([args session]
+     (create args session settings/db))
+    ([args session db]
+     {:response (str "NO Users can not create mailboxes through the IMAP "
+                     "interface.")
+      :session session})))
+
+(require-state #{"authenticated" "selected"}
+  (defn delete
+    ([args session]
+     (delete args session settings/db))
+    ([args session db]
+     {:response (str "NO Users can not delete mailboxes through the IMAP "
+                     "interface.")
+      :session session})))
+
+(require-state #{"authenticated" "selected"}
+  (defn subscribe
+    ([args session]
+     (create args session settings/db))
+    ([args session db]
+     (let [parsed (addresses/parse-address args)
+           sub-box (common/get-user-record args db)]
+       (cond
+         (not sub-box) {:response "BAD Indicated mailbox does not exist"
+                        :session session}
+         (not (addresses/addr-equality args 
+                                       (addresses/c-addr (:user session))))
+           {:response "NO You can't subscribe to that mailbox"}
+         :else
+           {:response (format "OK Subscribed to %s" args)
+            :session (assoc session 
+                            :subscriptions 
+                            (conj (:subscriptions session) 
+                                  (:norm-addr parsed)))})))))
