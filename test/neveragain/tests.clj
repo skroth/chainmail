@@ -123,6 +123,18 @@
 
     (if (seq? remaining) (recur remaining) nil)))
 
+(deftest test-quote-atom-split
+  (is (= (addresses/quote-atom-split "this \"is a\" test") 
+         ["this" "\"is a\"" "test"]))
+  (is (= (addresses/quote-atom-split "so is this") 
+         ["so" "is" "this"]))
+  (is (= (addresses/quote-atom-split "this \"one has\" two \"quote pairs\" in it") 
+         ["this" "\"one has\"" "two" "\"quote pairs\"" "in" "it"]))
+  (is (= (addresses/quote-atom-split "it (works on) parens too" \space \( \)) 
+         ["it" "(works on)" "parens" "too"]))
+  (is (= (addresses/quote-atom-split "and|'single|quotes'|with|bars" \| \' \') 
+         ["and" "'single|quotes'" "with" "bars"])))
+
 (deftest test-address-equality
   (loop [[[a1 a2 e] & remaining]
          [["lan.rogersbook@gmail.com" "lan.rogers.book@gmail.com" true]
@@ -248,5 +260,8 @@
     (is (empty? (-> case-two :session :subscriptions)))
     (is (not (empty? (-> case-one :session :subscriptions))))
     (is (= (-> case-one :session :subscriptions first) "lanny@neveraga.in"))))
+
+;(deftest test-imap-lsub
+;  (let [case-one (imap/lsub "*@neveraga.in")]))
 
 ;(standard-fixture test-imap-select)
