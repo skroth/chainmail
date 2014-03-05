@@ -3,6 +3,39 @@
     (clojure.data.codec [base64 :as b64])
     [clojure.string :as string]))
 
+(defn quote-atom-split 
+  "Takes a string and optionally a seperator (defaults to space), returns a 
+   vector of the string split on the seperator so long as it does not occur
+   within a balanced double quote pair."
+  ([s] (quote-atom-split s \space \" \"))
+  ([s sep in-esc out-esc]
+   (let [shallow-balance (= in-esc out-esc)]
+     (loop [[c & remaining] (seq s)
+            next-str []
+            r []
+            b-depth 0] ; If 0 we're top level and everything is balanced
+       (cond
+         (and (= c sep) ; Split on the seperator unless we're unbalanced
+              (= b-depth 0))
+           (recur remaining [] (conj r (apply str next-str)) b-depth)
+
+         (and shallow-balance     ; Special rules if in and out esc chars
+              (or (= c out-esc)   ; are the same, only one level then
+                  (= c in-esc)))
+           (recur remaining (conj next-str c) r 
+                  (if (= b-depth 0) 1 0))
+
+         (= c out-esc) ; Otherwise we count balance level
+           (recur remaining (conj next-str c) r (dec b-depth))
+         (= c in-esc)
+           (recur remaining (conj next-str c) r (inc b-depth))
+
+         (seq? remaining) ; Usual case, throw the char in the next-str
+           (recur remaining (conj next-str c) r b-depth)
+
+         :else ; If there's nothing left build the final vec and return
+           (conj r (apply str (conj next-str c))))))))
+
 (defn atom? [s]
   (boolean (re-matches #"[a-zA-Z0-9!#$%&'*+\-/=?^_`{|}~]+" s)))
 

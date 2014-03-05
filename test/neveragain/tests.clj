@@ -150,8 +150,24 @@
                             :hostname "neveraga.in"})
          "lanny@neveraga.in")))
 
+; IMAP utils stuff
+(deftest test-imap-parse-fetch-args
+  (loop [[[s [nums fields]] & remaining] 
+         [["5 FLAGS" [[5] #{:FLAGS}]] 
+          ["42 (FLAGS ENVELOPE)" [[42] #{:FLAGS :ENVELOPE}]]
+          ["42 ALL" [[42] #{:FLAGS :INTERNALDATE :RFC822.SIZE :ENVELOPE}]]
+          ["(1,2,3) (FLAGS)" [[1 2 3] #{:FLAGS}]]
+          ["(9:11) FAST" [[9 10 11] #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
+          ["(11:9) FAST" [[] #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
+          ["2a FAST" [nil #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
+          ["(1,2) SLOW" [[1 2] nil]]]]
+    (let [[r-nums r-fields] (imap/parse-fetch-args s)]
+      (is (= r-nums nums))
+      (is (= r-fields fields))
+      (if (not (empty? remaining)) (recur remaining)))))
 
-; IMAP stuff
+
+; IMAP commands stuff
 (deftest test-imap-noop
   (let [session {:dummy-key false}
         res-one (imap/noop nil session)

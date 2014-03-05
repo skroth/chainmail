@@ -1,6 +1,8 @@
 (ns neveragain.imap
   (:require
-    (clojure [string :as string])
+    (clojure [string :as string]
+             [set :as set-lib])
+    (swiss [arrows :refer :all])
     (clojure.java [jdbc :as j])
     (neveragain [common :as common]
                 [settings :as settings]
@@ -211,7 +213,7 @@
 (require-state #{"authenticated" "selected"}
   (defn subscribe
     ([args session]
-     (create args session settings/db))
+     (subscribe args session settings/db))
     ([args session db]
      (let [parsed (addresses/parse-address args)
            sub-box (common/get-user-record args db)]
@@ -227,3 +229,84 @@
                             :subscriptions 
                             (conj (:subscriptions session) 
                                   (:norm-addr parsed)))})))))
+
+(require-state #{"authenticated" "selected"}
+  (defn lsub
+    ([args session]
+     (subscribe args session settings/db))
+    ([args session db]
+     nil)))
+
+(def fetch-macros
+  {"ALL" #{:FLAGS :INTERNALDATE :RFC822.SIZE :ENVELOPE}
+   "FAST" #{:FLAGS :INTERNALDATE :RFC822.SIZE}
+   "FULL" #{:FLAGS :INTERNALDATE :RFC822.SIZE :ENVELOPE :BODY}})
+
+(def message-fields
+  #{:BODY :BODY.PEAK :ENVELOPE :FLAGS :INTERNALDATE :RFC822 :RFC822.HEADER
+    :RFC822.SIZE :RFC822.TEXT :UID})
+
+(defn inclusive-range 
+  "Like builtin range but is inclusive on both sides."
+  ([stop]
+   (inclusive-range 0 stop 1))
+  ([start stop]
+   (inclusive-range start stop 1))
+  ([start stop step]
+   (range start (inc stop) step)))
+
+(defn parse-fetch-args [args]
+  "Takes an arg string for the IMAP FETCH command and parses it into a vector
+  of sequence numbers and a set of keywords indicating valid fields specified
+  by the arg string. Will expand `:` sequence syntax, so 2:4 will expand to 
+  [2 3 4]. Will expand rfc3501 defined macros so ALL will expand to [:FLAGS
+  :INTERNALDATE :RFC822.SIZE]."
+  (let [[seq-nums item-names & other] (addresses/quote-atom-split args 
+                                                                  \space 
+                                                                  \( \))]
+    (if other 
+      nil ; Args list is too long, something is wrong
+      [(cond ; Part one, the message seq nums
+         (re-matches #"\d+" seq-nums)
+           [(Integer/parseInt seq-nums)]
+         (re-matches #"\((\d+)(\s*,\d+)*\)" seq-nums)
+           (-<> seq-nums
+                (.substring 1 (dec (count seq-nums)))
+                (string/split #"[\s,]+")
+                (map (fn [x] (Integer/parseInt x)) <>)
+                (vec))
+         (re-matches #"\((\d+):(\d+)\)" seq-nums)
+           (-<> seq-nums
+                (.substring 1 (dec (count seq-nums)))
+                (string/split #":")
+                (map (fn [x] (Integer/parseInt x)) <>)
+                (apply inclusive-range <>)
+                (vec))
+         :else nil)
+       (cond ; Part two, the message fields
+         (contains? fetch-macros item-names)
+           (get fetch-macros item-names)
+         (contains? message-fields (keyword item-names))
+           #{(keyword item-names)}
+         (re-matches #"\(([a-zA-Z0-9.]+)([\s,][a-zA-Z0-9.]+)*\)" item-names)
+           (-<> item-names
+                (.substring 1 (dec (count item-names)))
+                (string/split #"[\s,]+")
+                (map keyword <>)
+                (set)
+                (set-lib/intersection message-fields))
+         :else nil)])))
+
+(require-state #{"selected"}
+  (defn fetch
+    ([args session]
+     (fetch args session settings/db))
+    ([args session db]
+     (cond
+       (re-matches #"" args)
+     nil))))
+
+(def pat #"(\(\d+:\d+\)|\((\d+)(?:\s*,(\d+))*\)|\d+) (ALL|FAST|FULL)")
+(re-matches pat "(2:4) ALL")
+(re-matches pat "(2,3,4) ALL")
+(re-matches pat "(2) FAST")

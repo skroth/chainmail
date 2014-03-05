@@ -52,25 +52,32 @@
          422)))
 
 (deftest test-register
-  (let [old-users-num (:n (first (j/query test-db
-                                          ["SELECT COUNT(*) AS n FROM users"])))
-        req {:params {"local-part" "new.account"
-                      "domain" "neveraga.in"
-                      "password" "testpass"
-                      "fullname" "New J. Account"}}
-        res (json/read-str (views/register req test-db)
-                           :key-fn keyword)
-        ; Try the same thing again to make sure we can't register a address/name
-        ; combo more than once.
-        res-two (json/read-str (views/register req test-db)
-                                :key-fn keyword)
-        new-users-num (:n (first (j/query test-db
-                                          ["SELECT COUNT(*) AS n FROM users"])))]
-    (println res)
-    (is res)
-    (is (= (- new-users-num old-users-num) 1))
-    (is (:x (:key res)))
-    (is (:p (:key res)))
-    (is (= (:status res) "success"))
-    (is (= (:status res-two) "failure"))
-    (is (not (:key res-two)))))
+  (j/with-db-transaction [test-db test-db]
+    (let [old-users-num (->> ["SELECT COUNT(*) AS n FROM users"]
+                             (j/query test-db)
+                             first
+                             :n)
+          req {:params {"local-part" "new.account"
+                        "domain" "neveraga.in"
+                        "password" "testpass"
+                        "fullname" "New J. Account"}}
+          res (json/read-str (views/register req test-db)
+                             :key-fn keyword)
+          ; Try the same thing again to make sure we can't register a address/name
+          ; combo more than once.
+          res-two (json/read-str (views/register req test-db)
+                                  :key-fn keyword)
+          new-users-num (->> ["SELECT COUNT(*) AS n FROM users"]
+                             (j/query test-db)
+                             first
+                             :n)]
+      (is res)
+      (is (= (- new-users-num old-users-num) 1))
+      (is (:x (:key res)))
+      (is (:p (:key res)))
+      (is (= (:status res) "success"))
+      (is (= (:status res-two) "failure"))
+      (is (not (:key res-two)))
+
+      ; Rollback db mutations caused by this test
+      (j/db-set-rollback-only! test-db))))
