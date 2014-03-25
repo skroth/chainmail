@@ -14,6 +14,15 @@
     (is (= (pp/accepts? pda s) a))
     (if-not (empty? remaining) (recur remaining))))
 
+(deftest test-cfg-to-ndpda
+  (let [pda (pp/cfg-to-ndpda pp/ab-balanced-cfg)]
+    (is (pp/accepts? pda "aabb"))
+    (is (pp/accepts? pda "aaaaaaaaaabbbbbbbbbb"))
+    (is (not (pp/accepts? pda "aaabb")))
+    (is (not (pp/accepts? pda "aabbb")))
+    (is (not (pp/accepts? pda "bbbaaa")))
+    (is (not (pp/accepts? pda "baaabbb")))))
+
 (deftest test-ε=
   (is (pp/ε= \a :ε))
   (is (pp/ε= :ε \a))
