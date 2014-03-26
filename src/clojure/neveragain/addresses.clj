@@ -1,7 +1,9 @@
 (ns neveragain.addresses
   (:require
     (clojure.data.codec [base64 :as b64])
-    [clojure.string :as string]))
+    (clojure [set :as mset]
+             [string :as string])
+    (neveragain [pdaparse :as pp])))
 
 (defn quote-atom-split 
   "Takes a string and optionally a seperator (defaults to space), returns a 
@@ -108,3 +110,61 @@
   (if (name-addr? addr)
     (parse-name-addr addr)
     (parse-addr-spec addr)))
+
+(def ab-balanced-cfg
+  "A CFG that produces strings of the form a^nb^n."
+  {:start-symbol :S
+   :prod-rules {:S #{'(\a :S \b), :ε}}})
+
+"apple"
+[:q1 :ε :atext \a]
+[:q1 :ε :atext \b]
+
+(def addr-spec-grammar
+  {:start-symbol :S
+   :prod-rules {:S #{'(:local-part \@ :domain)}
+                :NO-WS-CTL (set (map char (concat (range 1 9)
+                                                  (range 14 32)
+                                                  [11 12 127])))
+                :text (set (map char (concat (range 1 10)
+                                             (range 14 128)
+                                             [11 12])))
+
+                :atext (mset/union (set (map char (concat (range 48 58)
+                                                          (range 65 90)
+                                                          (range 97 122))))
+                                   #{\! \# \$ \% \& \' \* \+ \-
+                                     \/ \= \? \^ \_ \` \{ \| \} \~})
+                :ctext (set (map char (concat (range 1 9)
+                                              (range 14 32)
+                                              (range 33 40)
+                                              (range 42 91)
+                                              (range 93 126)
+                                              [11 12 127])))
+                :r-atext-tail #{'(:atext :r-atext-tail) :ε }
+                :r-atext #{'(:atext :r-atext-tail)}
+                :atom #{'(:CFWS :atext :CFWS)}
+                :WSP #{\space \tab \newline \return}
+                :CRLF #{'(\return \newline)}
+                :ccontent #{:ctext :comment}
+                :rccontent #{'(:ccontent :rccontent) 
+                             '(:FWS :ccontent :rccontent)
+                             :ε}
+                :comment #{'(\( :rccontent \))
+                           '(\( :rccontent :FWS \))}
+                :RWSP #{'(:WSP :RWSP) :ε}
+                :FWS #{'(:WSP :FWS) '(:CRLF :WSP :RWSP)}
+                :CFWS #{:ε
+                        '(:FWS :comment :CFWS)
+                        '(:comment :CFWS)
+                        :FWS}
+                :DAT-tail #{'(\. :r-atext :DAT-tail) :ε}
+                :dot-atom-text #{'(:r-atext :DAT-tail)}
+                :dot-atom #{'(:CFWS :dot-atom-text :CFWS)}
+                ;:domain-literal #{}
+                :local-part #{:dot-atom :quoted-string}
+                :domain #{:dot-atom }}});:domain-literal}}})
+
+;(def addr-spec-pda (pp/cfg-to-ndpda addr-spec-grammar))
+;(time (pp/accepts? addr-spec-pda  "lan.rogers.book@gmail.com"))
+

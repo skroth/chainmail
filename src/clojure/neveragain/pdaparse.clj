@@ -3,8 +3,6 @@
     (clojure [string :as string]
              [set :as mset])))
 
-(def alpha (set (seq " abcdefghijklmnopqrstuvwxyz")))
-
 (def paren-balancer
   "A PDA that accepts any string with balanced paren pairs."
   {:start-state :q0
@@ -48,9 +46,12 @@
       ; For each rule S -> s make a transition from q1 to q1 popping and 
       ; reading nothing and pushing s onto stack so whenever we see S in stack
       (recur 
-        (apply conj q1
-               (map (fn [x] [:q1 :ε p-sym x])
-                    rules))
+        (if (every? char? rules)
+          ; If this transition only add non-terminal characters we can optimize
+          ; and pick the letter to push to stack based on the read symbol
+          (conj q1 [:q1 rules p-sym :<>])
+          (apply conj q1
+                 (map (fn [x] [:q1 :ε p-sym x]) rules)))
         (conj Σ rules) ; Remember we're going to flatten this
         remaining)
       {:start-state :q0
@@ -112,15 +113,24 @@
      (if (current-state (:accepting pda)) true false)
      (let [transitions (-> pda :program current-state)
            valid-trans (filter (fn [[_ i-sym s-sym __]]
-                                 (and (ε= i-sym next-sym)
-                                      (ε= s-sym (first stack))))
+                                (and (ε= i-sym next-sym)
+                                     (ε= s-sym (first stack))))
                                transitions)]
+
+       ;(if-not (empty? valid-trans) (do
+       ; (println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+       ; (println "Input: " (conj input-string next-sym))
+       ; (println "State: " current-state)
+       ; (println "Stack: " stack)
+       ; (println "Valid: " valid-trans)))
 
        (if-not (seq valid-trans) false
          (true? (some (fn [[next-state i-sym s-sym p-sym]]
-                 (let [i-string (if (ε? i-sym) ; Don't "read" if this is an ε trans
+                 ; Don't "read" if this is an ε trans or the transition is
+                 ; flagged as "no-read".
+                 (let [i-string (if (or (ε? i-sym) (= p-sym :<>))
                                   (conj input-string next-sym) 
                                   input-string)
-                       stack (εpush p-sym
+                       stack (εpush (if (= p-sym :<>) next-sym p-sym)
                                     (if (ε? s-sym) stack (rest stack)))]
                    (accepts? pda i-string next-state stack))) valid-trans)))))))
