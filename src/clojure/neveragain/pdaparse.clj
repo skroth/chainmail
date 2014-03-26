@@ -45,25 +45,36 @@
     (if p-sym
       ; For each rule S -> s make a transition from q1 to q1 popping and 
       ; reading nothing and pushing s onto stack so whenever we see S in stack
+      ; it will be "replaced" by s
       (recur 
         (if (every? char? rules)
-          ; If this transition only add non-terminal characters we can optimize
-          ; and pick the letter to push to stack based on the read symbol
+          ; If this transition only adds non-terminal characters we can 
+          ; optimize by making the input symbol a set and making the push
+          ; symbol be whatever the input symbol was. The presence of :<> tells
+          ; the intrepreter to not pop from the input string as well.
           (conj q1 [:q1 rules p-sym :<>])
+
+          ; Otherwise make epsilon transitions replacing the non-terminal
+          ; symbol with each of it's possible expansions per the CFG.
           (apply conj q1
                  (map (fn [x] [:q1 :ε p-sym x]) rules)))
         (conj Σ rules) ; Remember we're going to flatten this
         remaining)
-      {:start-state :q0
+      ; All NDPFAs will look like q0 -> q1 -> q2 with the same accepting
+      ; configuration and transitions save those form q1 to itself.
+      {:start-state :q0 
+       ; First move will always be to transform the stack to (first-symbol :Z)
+       ; where :Z will designate the end of string symbol.
        :program {:q0 [[:q1 :ε :ε (list (:start-symbol cfg) :Z)]]
-                 ; Make a transition from and to q1 for each input terminal
-                 ; symbol popping that same symbol from stack
+                 ; In addition to non terminal symbol expansion, we need to
+                 ; make a q1 -> q1 transtion poping the same symbol from stack
+                 ; and input for every terminal symbol.
                  :q1 (concat q1
                              (map (fn [x] [:q1 x x :ε]) 
-                                  ; Flatten and pull out non-terminals and ε
                                   (mset/difference (set (coll-flatten Σ))
                                                    (set (keys (:prod-rules cfg)))
                                                    #{:ε})))
+                 ; q2 doesn't do anything, it just accepts.
                  :q2 []}
        :accepting #{:q2}})))
 
@@ -109,14 +120,18 @@
   ([pda [next-sym & input-string] current-state stack]
    (if (and (not next-sym) (empty? stack))
      ; If there's nothing left to read and the stack is empty it's time to
-     ; check our accepting state.
+     ; check if current-state is accepting.
      (if (current-state (:accepting pda)) true false)
+
+     ; Otherwise figure out which transitions we can make given the current
+     ; configuration.
      (let [transitions (-> pda :program current-state)
            valid-trans (filter (fn [[_ i-sym s-sym __]]
                                 (and (ε= i-sym next-sym)
                                      (ε= s-sym (first stack))))
                                transitions)]
 
+       ; Some debugging stuff. This will get removed eventually.
        ;(if-not (empty? valid-trans) (do
        ; (println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~")
        ; (println "Input: " (conj input-string next-sym))
@@ -124,13 +139,25 @@
        ; (println "Stack: " stack)
        ; (println "Valid: " valid-trans)))
 
+       ; If there's no valid moves for us to make and we're here it means
+       ; there's no path to an accepting state, computation has "locked", and
+       ; this particular search path does not accept the input string.
        (if-not (seq valid-trans) false
+         ; But if that isn't the case make the appropriate adjustments to the
+         ; configuration and recur for each potential transition.
          (true? (some (fn [[next-state i-sym s-sym p-sym]]
-                 ; Don't "read" if this is an ε trans or the transition is
-                 ; flagged as "no-read".
+                 ; If this is an ε transition then we don't touch the input
+                 ; string, we just manipulate the stack and carry on. If this
+                 ; transition uses the special :<> p-symbol it means we're
+                 ; cloning the current input symbol onto the stack and still
+                 ; don't touch the input string.
                  (let [i-string (if (or (ε? i-sym) (= p-sym :<>))
                                   (conj input-string next-sym) 
                                   input-string)
+                       ; Likewise, if the transition doesn't care about stack
+                       ; state we don't pop anything. Again, the :<> symbol
+                       ; is a special value flagging that we should push 
+                       ; next-sym on to the stack.
                        stack (εpush (if (= p-sym :<>) next-sym p-sym)
                                     (if (ε? s-sym) stack (rest stack)))]
                    (accepts? pda i-string next-state stack))) valid-trans)))))))
