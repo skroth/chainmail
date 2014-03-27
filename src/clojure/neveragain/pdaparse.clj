@@ -39,7 +39,8 @@
   ; Build up our q1 transitions and sigma at the same time. We'll pull non
   ; terminal symbols out of sigma later. Every rule in the CFG will end up
   ; as a transition in our NDPDA.
-  (loop [q1 [[:q2 :ε :Z :ε]]
+  (loop [q1 [[:q2 :ε :Z :ε]
+             [:q1 :ε :ω :ε]]
          Σ '()
          [[p-sym rules] & remaining] (-> cfg :prod-rules seq)]
     (if p-sym
@@ -111,17 +112,73 @@
   [x]
   (= x :ε))
 
-(defn accepts?
-  "Accepts a description of a PDA and a string, returns true if the PDA accepts
-  the string and false otherwise."
-  ([pda s]
-   (accepts? pda (seq s) (:start-state pda) '()))
+(defn last-index
+  "Return the index of the last item in coll where (pred x) is logical true."
+  ([pred coll]
+   (last-index pred coll (-> coll count dec)))
+  ([pred coll idx]
+   (cond
+     (= idx -1) idx
+     (pred (get coll idx)) idx
+     :else (recur pred coll (dec idx)))))
 
-  ([pda [next-sym & input-string] current-state stack]
+(defn apply-transition
+  "Given a transition and configuration, returns the next configuration after
+  the application of the transition as a vector of args for parse. Does not
+  check if transition is actually valid."
+  [[next-state i-sym s-sym p-sym]
+   pda next-sym input-string current-state stack captures cap-hist]
+  (let [will-read (not (or (ε? i-sym) (= p-sym :<>)))
+        will-capture (captures s-sym)
+        will-pop (not (ε? s-sym))
+        capture-close (= :ω s-sym)
+        i-string (if will-read input-string (conj input-string next-sym))
+        stack (if will-pop (rest stack) stack)
+        stack (εconj stack (if will-capture :ω :ε))
+        stack (εpush (if (= p-sym :<>) next-sym p-sym) stack)
+        cap-hist (if will-capture (conj cap-hist [s-sym (count i-string) nil])
+                   cap-hist)
+        close-target (if capture-close 
+                       (last-index (fn [[_ __ x]] (nil? x)) cap-hist) 0)
+        cap-hist (if capture-close (assoc cap-hist 
+                                          close-target 
+                                          (assoc (get cap-hist close-target)
+                                                 2 (count input-string)))
+                   cap-hist)]
+
+    (list pda i-string next-state stack captures cap-hist)))
+
+(defn first-accepted
+  "Calls pred on each member of coll. Expects pred to return a sequential 
+  datum. Returns the first value of pred that where (first (pred x)) is 
+  logically true. If none are, returns nil."
+  [pred [f & remaining]]
+  (if-not f
+    nil
+    (let [v (pred f)]
+      (if (first v) v (recur pred remaining)))))
+
+(defn accepts?
+  "Takes a description of a PDA and a string, returns true if the PDA accepts
+  the string and false otherwise."
+  [pda s]
+  (-> (parse pda s #{})
+      first
+      true?))
+
+(defn parse
+  "Takes a description of a PDA, a string, and optionally a set of non-terminal
+  symbols which will be captured and returned. Returned value is a two item
+  list of (accepted, captured) where captured is a map from non-terminal 
+  symbols to their value within the string."
+  ([pda s captures]
+   (parse pda (seq s) (:start-state pda) '() captures []))
+
+  ([pda [next-sym & input-string] current-state stack captures cap-hist]
    (if (and (not next-sym) (empty? stack))
      ; If there's nothing left to read and the stack is empty it's time to
      ; check if current-state is accepting.
-     (if (current-state (:accepting pda)) true false)
+     (if (current-state (:accepting pda)) (list true cap-hist) false)
 
      ; Otherwise figure out which transitions we can make given the current
      ; configuration.
@@ -137,27 +194,36 @@
        ; (println "Input: " (conj input-string next-sym))
        ; (println "State: " current-state)
        ; (println "Stack: " stack)
-       ; (println "Valid: " valid-trans)))
+       ; (println "Hist : " cap-hist)
+       ; (println "Valid: " valid-trans)
+       ; ))
 
        ; If there's no valid moves for us to make and we're here it means
        ; there's no path to an accepting state, computation has "locked", and
        ; this particular search path does not accept the input string.
-       (if-not (seq valid-trans) false
+       (if-not (seq valid-trans) (list false nil)
          ; But if that isn't the case make the appropriate adjustments to the
          ; configuration and recur for each potential transition.
-         (true? (some (fn [[next-state i-sym s-sym p-sym]]
-                 ; If this is an ε transition then we don't touch the input
-                 ; string, we just manipulate the stack and carry on. If this
-                 ; transition uses the special :<> p-symbol it means we're
-                 ; cloning the current input symbol onto the stack and still
-                 ; don't touch the input string.
-                 (let [i-string (if (or (ε? i-sym) (= p-sym :<>))
-                                  (conj input-string next-sym) 
-                                  input-string)
-                       ; Likewise, if the transition doesn't care about stack
-                       ; state we don't pop anything. Again, the :<> symbol
-                       ; is a special value flagging that we should push 
-                       ; next-sym on to the stack.
-                       stack (εpush (if (= p-sym :<>) next-sym p-sym)
-                                    (if (ε? s-sym) stack (rest stack)))]
-                   (accepts? pda i-string next-state stack))) valid-trans)))))))
+         (first-accepted
+           (fn [trans]
+             (apply parse (apply-transition trans pda next-sym input-string
+                                            current-state stack captures
+                                            cap-hist)))
+           valid-trans))))))
+
+
+(defn extract [s parts]
+  "Takes a string and a collection of three tuples of the form [name start
+  stop] identifying a substring of s and its name. Returns a map of names to
+  sets of substrings identified in parts as having that name. Used with the
+  second value in the output of `parse`."
+  (let [len (count s)]
+    (loop [[[part start end] & remaining] parts
+           r {}]
+      (if-not part
+        r
+        (recur remaining 
+               (assoc r part 
+                      (conj (get r part)
+                            (subs s (- len start) (dec (- len end))))))))))
+

@@ -2,7 +2,8 @@
   (:require
     (clojure [test :refer :all]
              [string :as string])
-    (neveragain [pdaparse :as pp])))
+    (neveragain [pdaparse :as pp]
+                [addresses :as addresses])))
 
 (deftest test-accepts
   (loop [[[s pda a] & remaining] [["(())" pp/paren-balancer true]
@@ -13,6 +14,16 @@
                                   ["aaabb" pp/ab-balancer false]]]
     (is (= (pp/accepts? pda s) a))
     (if-not (empty? remaining) (recur remaining))))
+
+(deftest test-parse
+  (let [address "lan.rogers.book@gmail.com" 
+        result (pp/parse addresses/addr-spec-pda  
+                         address
+                         #{:local-part :domain})
+        extracted (pp/extract address (last result))]
+    (is result)
+    (is (= (first (:local-part extracted)) "lan.rogers.book"))
+    (is (= (first (:domain extracted))) "gmail.com")))
 
 (deftest test-cfg-to-ndpda
   (let [pda (pp/cfg-to-ndpda pp/ab-balanced-cfg)]
