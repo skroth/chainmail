@@ -3,6 +3,8 @@
     (clojure [string :as string]
              [set :as mset])))
 
+(def alpha (set (map char (concat (range 65 91) (range 97 123)))))
+
 (def paren-balancer
   "A PDA that accepts any string with balanced paren pairs."
   {:start-state :q0
@@ -27,12 +29,12 @@
 (defn coll-flatten
   "Flatten any nested coll structure"
   [coll]
-  (apply concat 
+  (apply concat
          (map (fn [x] (if (coll? x) (coll-flatten x) [x]))
               coll)))
 
 (defn cfg-to-ndpda
-  "Takes the description of a context free grammar and returns a 
+  "Takes the description of a context free grammar and returns a
   non-deterministic push down automaton that recognizes the language generated
   by the context free grammar"
   [cfg]
@@ -44,12 +46,12 @@
          Σ '()
          [[p-sym rules] & remaining] (-> cfg :prod-rules seq)]
     (if p-sym
-      ; For each rule S -> s make a transition from q1 to q1 popping and 
+      ; For each rule S -> s make a transition from q1 to q1 popping and
       ; reading nothing and pushing s onto stack so whenever we see S in stack
       ; it will be "replaced" by s
-      (recur 
+      (recur
         (if (every? char? rules)
-          ; If this transition only adds non-terminal characters we can 
+          ; If this transition only adds non-terminal characters we can
           ; optimize by making the input symbol a set and making the push
           ; symbol be whatever the input symbol was. The presence of :<> tells
           ; the intrepreter to not pop from the input string as well.
@@ -63,7 +65,7 @@
         remaining)
       ; All NDPFAs will look like q0 -> q1 -> q2 with the same accepting
       ; configuration and transitions save those form q1 to itself.
-      {:start-state :q0 
+      {:start-state :q0
        ; First move will always be to transform the stack to (first-symbol :Z)
        ; where :Z will designate the end of string symbol.
        :program {:q0 [[:q1 :ε :ε (list (:start-symbol cfg) :Z)]]
@@ -71,7 +73,7 @@
                  ; make a q1 -> q1 transtion poping the same symbol from stack
                  ; and input for every terminal symbol.
                  :q1 (concat q1
-                             (map (fn [x] [:q1 x x :ε]) 
+                             (map (fn [x] [:q1 x x :ε])
                                   (mset/difference (set (coll-flatten Σ))
                                                    (set (keys (:prod-rules cfg)))
                                                    #{:ε})))
@@ -79,8 +81,12 @@
                  :q2 []}
        :accepting #{:q2}})))
 
-   
-(defn ε= 
+(defn ε?
+  "Returns true if `x` is the epsilon keyword."
+  [x]
+  (= x :ε))
+
+(defn ε=
   "Returns true if `a` and `b` are equal, either is a set which contains the
   other, or either or both are :ε. Behaviour on two sets is undefined."
   [a b]
@@ -103,14 +109,9 @@
   "Pushes all non :ε members of x into y, preserving order of x. X may also be
   a non collecton."
   [x y]
-  (if-not (coll? x) 
+  (if-not (coll? x)
     (εconj y x)
     (apply εconj y (reverse x))))
-
-(defn ε?
-  "Returns true if `x` is the epsilon keyword."
-  [x]
-  (= x :ε))
 
 (defn last-index
   "Return the index of the last item in coll where (pred x) is logical true."
@@ -138,10 +139,10 @@
         stack (εpush (if (= p-sym :<>) next-sym p-sym) stack)
         cap-hist (if will-capture (conj cap-hist [s-sym (count i-string) nil])
                    cap-hist)
-        close-target (if capture-close 
+        close-target (if capture-close
                        (last-index (fn [[_ __ x]] (nil? x)) cap-hist) 0)
-        cap-hist (if capture-close (assoc cap-hist 
-                                          close-target 
+        cap-hist (if capture-close (assoc cap-hist
+                                          close-target
                                           (assoc (get cap-hist close-target)
                                                  2 (count input-string)))
                    cap-hist)]
@@ -149,8 +150,8 @@
     (list pda i-string next-state stack captures cap-hist)))
 
 (defn first-accepted
-  "Calls pred on each member of coll. Expects pred to return a sequential 
-  datum. Returns the first value of pred that where (first (pred x)) is 
+  "Calls pred on each member of coll. Expects pred to return a sequential
+  datum. Returns the first value of pred that where (first (pred x)) is
   logically true. If none are, returns nil."
   [pred [f & remaining]]
   (if-not f
@@ -158,18 +159,10 @@
     (let [v (pred f)]
       (if (first v) v (recur pred remaining)))))
 
-(defn accepts?
-  "Takes a description of a PDA and a string, returns true if the PDA accepts
-  the string and false otherwise."
-  [pda s]
-  (-> (parse pda s #{})
-      first
-      true?))
-
 (defn parse
   "Takes a description of a PDA, a string, and optionally a set of non-terminal
   symbols which will be captured and returned. Returned value is a two item
-  list of (accepted, captured) where captured is a map from non-terminal 
+  list of (accepted, captured) where captured is a map from non-terminal
   symbols to their value within the string."
   ([pda s captures]
    (parse pda (seq s) (:start-state pda) '() captures []))
@@ -211,6 +204,13 @@
                                             cap-hist)))
            valid-trans))))))
 
+(defn accepts?
+  "Takes a description of a PDA and a string, returns true if the PDA accepts
+  the string and false otherwise."
+  [pda s]
+  (-> (parse pda s #{})
+      first
+      true?))
 
 (defn extract [s parts]
   "Takes a string and a collection of three tuples of the form [name start
@@ -222,8 +222,8 @@
            r {}]
       (if-not part
         r
-        (recur remaining 
-               (assoc r part 
+        (recur remaining
+               (assoc r part
                       (conj (get r part)
                             (subs s (- len start) (dec (- len end))))))))))
 
