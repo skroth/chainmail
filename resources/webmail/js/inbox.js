@@ -17,6 +17,7 @@ function InboxModel() {
     }
   }
 
+  self.key = ko.observable(null)
   self.statusText = ko.observable('transfering messages')
 
   self.activeMessageSet = ko.observable(self.messageSets.inbox)
@@ -156,10 +157,6 @@ function InboxModel() {
 
 }
 
-var viewModel = new InboxModel()
-ko.applyBindings(viewModel)
-
-viewModel.activeMessageSet(viewModel.messageSets.inbox)
 
 X = "AICxV/iefCH6D7LCr+iQBIjzrCM2CZcT39VAqCUcJsfg"
 P = "AMP1dAI9SD68MgN50pCx8qtZUYywqflFLCc0jBbR3nZL"
@@ -169,6 +166,77 @@ privKey = {
   x: sjcl.bn.fromBits(sjcl.codec.base64.toBits(X))
 }
 
+function serializeKey(key) {
+  // Returns a string
+  return JSON.stringify({
+    p: sjcl.codec.base64.fromBits(key.p.toBits()),
+    x: sjcl.codec.base64.fromBits(key.x.toBits()),
+    y: sjcl.codec.base64.fromBits(key.y.toBits()),
+    g: sjcl.codec.base64.fromBits(key.g.toBits()),
+  })
+}
+
+//{"x":"Z3Ugbe3j+QbZf889HPlXYR6s3WkC+aQMc9XD9Vd/Oa4=","y":"YtI+hbFCe+f1iIswvh/1ad1AEHvH2V48t0ZsYE0HlxM=","g":"NbNUJRXy2HgHp9IbXKqtle5JaXQhzEzTEjLtk/Lms8o=","p":"AOY0XfbbJ8gXURuL429Wyp9yNI7sxHsNiO1yi4t+84g/"}
+
+function deserializeKey(key) {
+  // Returns an object, values are sjcl bignums
+  var p = JSON.parse(key),
+    bnFields = ['p', 'x', 'g', 'y']
+
+  for (var i=0; i<bnFields.length; i++) {
+    var s = p[bnFields[i]]
+    p[bnFields[i]] = sjcl.bn.fromBits(sjcl.codec.base64.toBits(s))
+  }
+
+  return p
+}
+
+function fetchPrivKey(callback) {
+  /* Looks for possible places of storing a private key in the browser (right
+  now that means local storage) and if non is found initiates UI to request it
+  from the user. Requires Foundation but otherwise trys to make no assumptions
+  about the DOM. */
+  var pk 
+  try { pk = deserializeKey(localStorage.getItem('cmPrivKey')) }
+  catch (error) {}
+
+  if (pk) {
+    callback?callback(pk):null
+  } else {
+    var modal = $(''
+      + '<div id="privkey-modal" class="reveal-modal" data-reveal>'
+        + '<h2>Hark! Present thine private key!</h2>'
+        + '<p>Hark, without thine private key thou wilst surely fail on '
+          + 'thine quest! Present it now that we may yet succeed!</p>'
+        + '<textarea></textarea>'
+        + '<a class="button right" id="privkey-modal-submit">'
+          + 'Sally Forth!'
+        + '</a>'
+      + '</div>')
+      .prependTo('body')
+      .foundation()
+      .foundation('reveal', 'open')
+
+    modal.find('#privkey-modal-submit')
+      .on('click', function(e) {
+        e.preventDefault()
+
+        try {
+          var key = deserializeKey(modal.find('textarea').val())
+          modal.foundation('reveal', 'close')
+            .delay(100)
+            .remove()
+          
+          callback?callback(key):null
+        } catch (err) {
+          alert('Hark fair knight, thine key douth fail you in this time most '
+            + 'dire! The nature of the failure is purported to be: '
+            + err.message)
+        }
+      })
+  }
+}
+
 function elGamalDecrypt(block, privKey) {
   // Pretty much a line for line transliteration of BC's ElGamal decrpytion
   var inBitLength = sjcl.bitArray.bitLength(block),
@@ -176,7 +244,7 @@ function elGamalDecrypt(block, privKey) {
     in2 = sjcl.bitArray.bitSlice(block, inBitLength/2, inBitLength),
     gamma = sjcl.bn.fromBits(in1),
     phi = sjcl.bn.fromBits(in2),
-    result = gamma.powermod(p.sub(1).sub(privKey.x), privKey.p)
+    result = gamma.powermod(privKey.p.sub(1).sub(privKey.x), privKey.p)
       .mul(phi)
       .mod(privKey.p)
 
@@ -320,16 +388,37 @@ function strftime(formatString, d) {
 $.getJSON('/orient', function(data) { viewModel.me = data })
 
 function getHumanName(s) {
-  return s.match(/^(.+?) <.+>$/)[1]
+  /* Takes an address in the form "Name <address@domain>" and returns name if
+  present or just the address no name is available. */
+  var match = s.match(/^(.+?) <.+>$/)
+  if (match) {
+    return match[1]
+  } else {
+    return s
+  }
 }
 
 function getEmailAddress(s) {
-  return s.match(/^.+ <(.+?)>$/)[1]
+  var match = s.match(/^.+ <(.+?)>$/)
+  if (match) {
+    return match[1]
+  } else {
+    return s
+  }
 }
 
 ;(function() {
+  viewModel = new InboxModel()
+  ko.applyBindings(viewModel)
+
   // Init up foundation
   $(document).foundation()
+
+  fetchPrivKey(function (key) {
+    localStorage.setItem('cmPrivKey', serializeKey(key))
+    viewModel.key(key)
+    viewModel.activeMessageSet(viewModel.messageSets.inbox)
+  })
 
   // And start loading these mofos
   //viewModel.onMessageSetChange(viewModel.messageSets.inbox)
