@@ -30,6 +30,7 @@
 
 (defn write-out [out-writer message]
   "Write a line to the socket (or any print writer) and flush."
+  (println "S: " message)
   (.println out-writer (str message "\r"))
   (.flush out-writer))
 

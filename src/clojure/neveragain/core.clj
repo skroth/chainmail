@@ -66,11 +66,12 @@
     (let [msg (try
         (.next (:in inner-conn)) ; Could happen if the client closed the connection.
         (catch NoSuchElementException e nil))]
+      (println "C: " msg)
       (if (= msg nil)
         nil
         (let [response (respond inner-conn msg envl)]
           (cond
-            (= (type response) SSLSocket) (recur envl response)
+            (not= (:socket response) nil) (recur envl response)
             (= response nil) nil
             :else (recur response inner-conn)))))))
 
