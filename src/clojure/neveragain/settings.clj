@@ -5,6 +5,12 @@
   :subprotocol "sqlite"
   :subname "neveragain.db"})
 
+(def keyfiles {
+               :key "../ssl/client.pkcs8"
+               :cert "../ssl/client.crt"
+               :ca "../ssl/demoCA/cacert.pem"
+               })
+
 (def thread-count 1)
 (def smtp-port 2500)
 (def salt-factor 10)

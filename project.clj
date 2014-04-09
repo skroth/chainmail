@@ -13,7 +13,8 @@
     [org.mindrot/jbcrypt "0.3m"]
     [bouncycastle/bcprov-jdk16 "140"]
     [compojure "1.1.6"]
-    [selmer "0.5.7"]]
+    [selmer "0.5.7"]
+    [less-awful-ssl "0.1.1"]]
   :plugins [[lein-ring "0.7.1"]]
   :main ^:skip-aot neveragain.core
   :target-path "target/%s"
