@@ -15,10 +15,10 @@ perfectly secure since other servers a user may send mail to can store that
 user's mail however they want.
 
 ### Components:
-* SMTP Server [almost finished] -- Receives and sends mail as a normal SMTP client does. Encrypts mail on disk using user's key.
-* IMAP Server [in progress] -- Delivers encrypted mail to user's client.
-* Client-side IMAP proxy [planned] -- Run on user's machine. Decrypts mail using user's key. Allows user to use traditional desktop mail clients.
-* Webmail client [in progress] -- Runs on server. Decrypts user's mail client side in browser.
+* **SMTP Server** [almost finished] -- Receives and sends mail as a normal SMTP client does. Encrypts mail on disk using user's key.
+* **IMAP Server** [in progress] -- Delivers encrypted mail to user's client.
+* **Client-side IMAP proxy** [planned] -- Run on user's machine. Decrypts mail using user's key. Allows user to use traditional desktop mail clients.
+* **Webmail client** [in progress] -- Runs on server. Decrypts user's mail client side in browser.
 
 Everything is open source and thus able to be audited and run on one's own machine.
 
