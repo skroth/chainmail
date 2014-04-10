@@ -17,7 +17,7 @@
 
 (deftest test-parse
   (let [address "lan.rogers.book@gmail.com" 
-        result (pp/parse addresses/addr-spec-pda  
+        result (pp/parse (pp/cfg-to-ndpda addresses/addr-spec-grammar)
                          address
                          #{:local-part :domain})
         extracted (pp/extract address (last result))]

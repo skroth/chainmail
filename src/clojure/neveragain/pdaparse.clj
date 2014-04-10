@@ -3,7 +3,7 @@
     (clojure [string :as string]
              [set :as mset])))
 
-(def alpha (set (map char (concat (range 65 91) (range 97 123)))))
+(def alpha (set (map char (concat (range 65 91) (range 97 123) [\space]))))
 
 (def paren-balancer
   "A PDA that accepts any string with balanced paren pairs."
