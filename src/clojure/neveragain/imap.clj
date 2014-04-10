@@ -176,13 +176,16 @@
                (j/execute! db [clear-recent-sql user-id]))
 
              ; And give them our response
-             {:response [(format "%d EXISTS" exists-count)
-                         (format "%d RECENT" recent-count)
-                         (format "OK [UNSEEN %d]" unseen-seq-num)
-                         (format "FLAGS (%s)" flags-list)
-                         "OK SELECT command complete"]
-              :session (merge session {:selected-box selected-user
-                                       :state "selected"})}))))))
+             (let [response [(format "%d EXISTS" exists-count)
+                             (format "%d RECENT" recent-count)
+                             (format "FLAGS (%s)" flags-list)
+                             "OK SELECT command complete"]
+                   unseen-line (format "OK [UNSEEN %d]" unseen-seq-num)]
+               {:response (if unseen-seq-num
+                            (conj response unseen-line)
+                            response)
+                :session (merge session {:selected-box selected-user
+                                         :state "selected"})})))))))
 
 (require-state #{"authenticated" "selected"}
   (defn examine 

@@ -133,7 +133,10 @@
         will-capture (captures s-sym)
         will-pop (not (ε? s-sym))
         capture-close (= :ω s-sym)
-        i-string (if will-read input-string (conj input-string next-sym))
+        i-string (cond
+                   (nil? input-string) '()
+                   will-read input-string 
+                   :else (conj input-string next-sym))
         stack (if will-pop (rest stack) stack)
         stack (εconj stack (if will-capture :ω :ε))
         stack (εpush (if (= p-sym :<>) next-sym p-sym) stack)
@@ -144,7 +147,7 @@
         cap-hist (if capture-close (assoc cap-hist
                                           close-target
                                           (assoc (get cap-hist close-target)
-                                                 2 (count input-string)))
+                                                 2 (count i-string)))
                    cap-hist)]
 
     (list pda i-string next-state stack captures cap-hist)))
@@ -212,18 +215,25 @@
       first
       true?))
 
-(defn extract [s parts]
+(defn extract 
   "Takes a string and a collection of three tuples of the form [name start
   stop] identifying a substring of s and its name. Returns a map of names to
   sets of substrings identified in parts as having that name. Used with the
-  second value in the output of `parse`."
-  (let [len (count s)]
-    (loop [[[part start end] & remaining] parts
-           r {}]
-      (if-not part
-        r
-        (recur remaining
-               (assoc r part
-                      (conj (get r part)
-                            (subs s (- len start) (dec (- len end))))))))))
+  second value in the output of `parse`. If optional argument `singles` is 
+  true will assume only one instance of each capture will appear and will
+  return a map of string rather than lists."
+  ([s parts]
+   (extract s parts false))
+  ([s parts singles]
+   (let [len (count s)]
+     (loop [[[part start end] & remaining] parts
+            r {}]
+       (if-not part
+         r
+         (recur remaining
+                (assoc r part
+                       (if-not singles
+                         (conj (get r part)
+                               (subs s (- len start) (- len end)))
+                         (subs s (- len start) (- len end))))))))))
 

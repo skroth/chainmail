@@ -113,15 +113,16 @@
           ["lanny@neveraga.in" true false "lanny" "neveraga.in"]
           ["YHWH@God.ng" true false "yhwh" "god.ng"]
           ["i~am~a~god@north.west" true true "i~am~a~god" "north.west"]
-          ["not a valid@address" false true -1 -1]]]
-    (is (= (:valid (addresses/parse-address s)) v))
-    (is (= (:warning (addresses/parse-address s)) w))
-    (if-not (= l -1)
-      (is (= (:local-part (addresses/parse-address s)) l)))
-    (if-not (= d -1)
-      (is (= (:domain (addresses/parse-address s)) d)))
+          ["not a valid@address" false nil nil nil]]]
+    (let [parsed (addresses/parse-address s)]
+      (is (= (:valid parsed) v))
+      (is (= (:warning parsed) w))
+      (if-not (= l -1)
+        (is (= (:local-part parsed) l)))
+      (if-not (= d -1)
+        (is (= (:domain parsed) d)))
 
-    (if (seq? remaining) (recur remaining) nil)))
+      (if (seq? remaining) (recur remaining) nil))))
 
 (deftest test-quote-atom-split
   (is (= (addresses/quote-atom-split "this \"is a\" test") 
@@ -223,8 +224,6 @@
     (is (some (fn [x] (re-matches #"\d+ EXISTS" x)) 
               (:response case-one)))
     (is (some (fn [x] (re-matches #"\d+ RECENT" x)) 
-              (:response case-one)))
-    (is (some (fn [x] (re-matches #"OK \[UNSEEN \d+\].*" x)) 
               (:response case-one)))
     (is (some (fn [x] (re-matches #"FLAGS \(.*\)" x)) 
               (:response case-one)))

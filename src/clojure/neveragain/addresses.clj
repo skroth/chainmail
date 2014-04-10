@@ -102,27 +102,42 @@
         parse-result (parse-addr-spec addr-spec)]
     (assoc parse-result :dispaly-name display-name)))
 
+;(defn parse-address [addr]
+;  "Takes an address and returns a map of its parts. If the address does not
+;  parse will still return a map with the :valid field set to false. If the
+;  address does parse but in such a way that we expect many mail providers
+;  to not recognize it, the :warning field will be set."
+;  (if (name-addr? addr)
+;    (parse-name-addr addr)
+;    (parse-addr-spec addr)))
+
 (defn parse-address [addr]
-  "Takes an address and returns a map of its parts. If the address does not
-  parse will still return a map with the :valid field set to false. If the
-  address does parse but in such a way that we expect many mail providers
-  to not recognize it, the :warning field will be set."
-  (if (name-addr? addr)
-    (parse-name-addr addr)
-    (parse-addr-spec addr)))
-
-(def ab-balanced-cfg
-  "A CFG that produces strings of the form a^nb^n."
-  {:start-symbol :S
-   :prod-rules {:S #{'(\a :S \b), :ε}}})
-
-"apple"
-[:q1 :ε :atext \a]
-[:q1 :ε :atext \b]
+  (let [l-addr (.toLowerCase addr)
+        [valid parsts] (pp/parse addr-spec-pda
+                                 l-addr
+                                 #{:local-part :box-name :sub-box :domain})]
+    (if-not valid
+      ; Some of our post-parse touch-up assumes that the address is valid,
+      ; if it's not just return now, the rest won't mean anything anyway.
+      {:valid false} 
+      (let [{:keys [local-part box-name sub-box domain]} 
+              (pp/extract l-addr parsts true)
+            norm-box-name (string/replace box-name #"\." "")]
+        {:valid true
+         :warning (or (not (common-atom? local-part))
+                      (not (common-atom? domain)))
+         :local-part local-part
+         :box-name box-name
+         :sub-box sub-box
+         :norm-box-name norm-box-name
+         :norm-addr (str norm-box-name \@ domain)
+         :domain domain}))))
 
 (def addr-spec-grammar
   {:start-symbol :S
-   :prod-rules {:S #{'(:local-part \@ :domain)}
+   :prod-rules {:S #{'(:local-part :sub-box-tail \@ :domain)}
+                :sub-box-tail #{'(\+ :sub-box) :ε}
+                :sub-box #{:dot-atom}
                 :NO-WS-CTL (set (map char (concat (range 1 9)
                                                   (range 14 32)
                                                   [11 12 127])))
@@ -133,8 +148,8 @@
                 :atext (mset/union (set (map char (concat (range 48 58)
                                                           (range 65 90)
                                                           (range 97 122))))
-                                   #{\! \# \$ \% \& \' \* \+ \-
-                                     \/ \= \? \^ \_ \` \{ \| \} \~})
+                                   #{\! \# \$ \% \& \' \* \- \/ 
+                                     \= \? \^ \_ \` \{ \| \} \~})
                 :ctext (set (map char (concat (range 1 9)
                                               (range 14 32)
                                               (range 33 40)
@@ -162,9 +177,10 @@
                 :dot-atom-text #{'(:r-atext :DAT-tail)}
                 :dot-atom #{'(:CFWS :dot-atom-text :CFWS)}
                 ;:domain-literal #{}
-                :local-part #{:dot-atom :quoted-string}
+                :box-name #{:dot-atom :quoted-string}
+                :local-part #{'(:box-name :sub-box-tail)}
                 :domain #{:dot-atom }}});:domain-literal}}})
 
-;(def addr-spec-pda (pp/cfg-to-ndpda addr-spec-grammar))
+(def addr-spec-pda (pp/cfg-to-ndpda addr-spec-grammar))
 ;(time (pp/accepts? addr-spec-pda  "lan.rogers.book@gmail.com"))
 
