@@ -5,7 +5,7 @@ Chain Mail is a complete email package that aims to reduce the risk of storing
 email on Chain Mail cooperative servers. The basic idea is that a cooperative
 server stores public keys for every client it accepts and stores mail for. Upon
 receiving an email it will use the appropriate key to encrypt the message and
-then discard the plaintext message. This means that cooperative server will
+then discard the plaintext message. This means that cooperative servers will
 never store readable emails, reducing the risk in the case of a compromised
 database and fundamentally prohibiting server operators from reading their
 client's mail.
@@ -19,12 +19,13 @@ user's mail however they want.
 * **IMAP Server** [in progress] -- Delivers encrypted mail to user's client.
 * **Client-side IMAP proxy** [planned] -- Run on user's machine. Decrypts mail using user's key. Allows user to use traditional desktop mail clients.
 * **Webmail client** [in progress] -- Runs on server. Decrypts user's mail client side in browser.
+* **Browser Plugin** [planned] -- Chainmail servers can forward encrypted copies of messages to third party webmail providers (like Gmail). Using a browser plugin users can then decrypt those messages without the plaintext ever being stored with the third party. This is optional and has security implications discussed below.
 
 Everything is open source and thus able to be audited and run on one's own machine.
 
 ## Frequently Asked Questions
 
-### What is `java.security.InvalidKeyException: Illegal key size`?  
+### What is `InvalidKeyException: Illegal key size`?  
 TL;RD The U.S. Government is a dick, download this:
 
 http://www.oracle.com/technetwork/java/javase/downloads/jce-6-download-429243.html
@@ -71,3 +72,16 @@ your messages once they're in the database, but could easily read them before
 then, so you have to trust your server operator in the same way you have to
 trust any mail store operator.
 
+### What are the implications of using the browser plugin?
+The browser plugin allows encrypted messages forwarded to third parties like
+Gmail to be decrypted in the browser and thus to never be stored with the third
+party, similar to Chainmail's own webmail interface. It's important to know
+that this poses a security risk however. When you visit the third party's
+webmail service they can serve you arbitrary client code which may read your
+plaintext messages after decryption has happened. Effectively you have no
+more meaningful protection from your third party mail provider eavesdropping on
+you than if the mail had been sent directly to the third party provider. What
+you do have is improved security in the case that your third party provider is
+compromised: attackers will be unable to access stored messages. The browser
+plugin is provided to aid convenience of integration but this caveat should be
+understood before you install it.

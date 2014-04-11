@@ -5,6 +5,57 @@
              [string :as string])
     (neveragain [pdaparse :as pp])))
 
+(def addr-spec-grammar
+  {:start-symbol :S
+   :prod-rules {:S #{'(:local-part :sub-box-tail \@ :domain)}
+                :sub-box-tail #{'(\+ :sub-box) :ε}
+                :sub-box #{:dot-atom}
+                :NO-WS-CTL (set (map char (concat (range 1 9)
+                                                  (range 14 32)
+                                                  [11 12 127])))
+                :text (set (map char (concat (range 1 10)
+                                             (range 14 128)
+                                             [11 12])))
+
+                :atext (mset/union (set (map char (concat (range 48 58)
+                                                          (range 65 90)
+                                                          (range 97 122))))
+                                   #{\! \# \$ \% \& \' \* \- \/ 
+                                     \= \? \^ \_ \` \{ \| \} \~})
+                :ctext (set (map char (concat (range 1 9)
+                                              (range 14 32)
+                                              (range 33 40)
+                                              (range 42 91)
+                                              (range 93 126)
+                                              [11 12 127])))
+                :r-atext-tail #{'(:atext :r-atext-tail) :ε }
+                :r-atext #{'(:atext :r-atext-tail)}
+                :atom #{'(:CFWS :atext :CFWS)}
+                :WSP #{\space \tab \newline \return}
+                :CRLF #{'(\return \newline)}
+                :ccontent #{:ctext :comment}
+                :rccontent #{'(:ccontent :rccontent) 
+                             '(:FWS :ccontent :rccontent)
+                             :ε}
+                :comment #{'(\( :rccontent \))
+                           '(\( :rccontent :FWS \))}
+                :RWSP #{'(:WSP :RWSP) :ε}
+                :FWS #{'(:WSP :FWS) '(:CRLF :WSP :RWSP)}
+                :CFWS #{:ε
+                        '(:FWS :comment :CFWS)
+                        '(:comment :CFWS)
+                        :FWS}
+                :DAT-tail #{'(\. :r-atext :DAT-tail) :ε}
+                :dot-atom-text #{'(:r-atext :DAT-tail)}
+                :dot-atom #{'(:CFWS :dot-atom-text :CFWS)}
+                ;:domain-literal #{}
+                :box-name #{:dot-atom :quoted-string}
+                :local-part #{'(:box-name :sub-box-tail)}
+                :domain #{:dot-atom }}});:domain-literal}}})
+
+(def addr-spec-pda (pp/cfg-to-ndpda addr-spec-grammar))
+
+
 (defn quote-atom-split 
   "Takes a string and optionally a seperator (defaults to space), returns a 
    vector of the string split on the seperator so long as it does not occur
@@ -132,55 +183,4 @@
          :norm-box-name norm-box-name
          :norm-addr (str norm-box-name \@ domain)
          :domain domain}))))
-
-(def addr-spec-grammar
-  {:start-symbol :S
-   :prod-rules {:S #{'(:local-part :sub-box-tail \@ :domain)}
-                :sub-box-tail #{'(\+ :sub-box) :ε}
-                :sub-box #{:dot-atom}
-                :NO-WS-CTL (set (map char (concat (range 1 9)
-                                                  (range 14 32)
-                                                  [11 12 127])))
-                :text (set (map char (concat (range 1 10)
-                                             (range 14 128)
-                                             [11 12])))
-
-                :atext (mset/union (set (map char (concat (range 48 58)
-                                                          (range 65 90)
-                                                          (range 97 122))))
-                                   #{\! \# \$ \% \& \' \* \- \/ 
-                                     \= \? \^ \_ \` \{ \| \} \~})
-                :ctext (set (map char (concat (range 1 9)
-                                              (range 14 32)
-                                              (range 33 40)
-                                              (range 42 91)
-                                              (range 93 126)
-                                              [11 12 127])))
-                :r-atext-tail #{'(:atext :r-atext-tail) :ε }
-                :r-atext #{'(:atext :r-atext-tail)}
-                :atom #{'(:CFWS :atext :CFWS)}
-                :WSP #{\space \tab \newline \return}
-                :CRLF #{'(\return \newline)}
-                :ccontent #{:ctext :comment}
-                :rccontent #{'(:ccontent :rccontent) 
-                             '(:FWS :ccontent :rccontent)
-                             :ε}
-                :comment #{'(\( :rccontent \))
-                           '(\( :rccontent :FWS \))}
-                :RWSP #{'(:WSP :RWSP) :ε}
-                :FWS #{'(:WSP :FWS) '(:CRLF :WSP :RWSP)}
-                :CFWS #{:ε
-                        '(:FWS :comment :CFWS)
-                        '(:comment :CFWS)
-                        :FWS}
-                :DAT-tail #{'(\. :r-atext :DAT-tail) :ε}
-                :dot-atom-text #{'(:r-atext :DAT-tail)}
-                :dot-atom #{'(:CFWS :dot-atom-text :CFWS)}
-                ;:domain-literal #{}
-                :box-name #{:dot-atom :quoted-string}
-                :local-part #{'(:box-name :sub-box-tail)}
-                :domain #{:dot-atom }}});:domain-literal}}})
-
-(def addr-spec-pda (pp/cfg-to-ndpda addr-spec-grammar))
-;(time (pp/accepts? addr-spec-pda  "lan.rogers.book@gmail.com"))
 
