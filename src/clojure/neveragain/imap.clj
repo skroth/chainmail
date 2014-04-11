@@ -32,14 +32,6 @@
                            (str tag " " resp "\r\n")))
       session)))
 
-(defn wrap-required-state [state-name func]
-  "Not in use any more"
-  (fn [args session]
-    (if-not (= (:state session) state-name)
-      {:response (str "BAD This command requires the `" state-name "` state.")
-       :session session}
-      (func args session))))
-
 (defmacro require-state 
   "Wraps a pure verb handler to prevent the handler from being executed if 
   `(:state session)`, as per the handlers's binding, is not equal in the 
@@ -309,7 +301,3 @@
        (re-matches #"" args)
      nil))))
 
-(def pat #"(\(\d+:\d+\)|\((\d+)(?:\s*,(\d+))*\)|\d+) (ALL|FAST|FULL)")
-(re-matches pat "(2:4) ALL")
-(re-matches pat "(2,3,4) ALL")
-(re-matches pat "(2) FAST")

@@ -5,12 +5,13 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [
     [org.clojure/clojure "1.5.1"]
-    [swiss-arrows "1.0.0"]
+    [org.clojure/core.async "0.1.278.0-76b25b-alpha"]
     [org.clojure/java.jdbc "0.3.2"]
     [org.clojure/data.codec "0.1.0"]
     [org.clojure/data.json "0.2.3"]
     [org.xerial/sqlite-jdbc "3.7.2"]
     [org.mindrot/jbcrypt "0.3m"]
+    [swiss-arrows "1.0.0"]
     [bouncycastle/bcprov-jdk16 "140"]
     [compojure "1.1.6"]
     [selmer "0.5.7"]
