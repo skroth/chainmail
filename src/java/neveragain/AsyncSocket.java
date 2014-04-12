@@ -35,15 +35,15 @@ public class AsyncSocket {
     byte[] lineSoFar = this.in.array();
 
     for (int i=startPos; i<endPos; i++) {
-      if (lineSoFar[i] == '\n') {
-        if (lineSoFar[i+1] == '\n' || true) {
+      if (lineSoFar[i] == '\r') {
+        if (lineSoFar[i+1] == '\n') {
           // This line is DONE, return that sucker
           String line = new String(lineSoFar, 0, i-startPos, "UTF-8");
 
           // Reclaim out buffer preserving any partial line
-          in.position(i+2);
-          in.limit(endPos);
-          in.compact();
+          this.in.position(i+2);
+          this.in.limit(endPos);
+          this.in.compact();
 
           return line;
         }
@@ -51,5 +51,22 @@ public class AsyncSocket {
     }
 
     return null;
+  }
+
+  public void write(String line) throws IOException, 
+         UnsupportedEncodingException {
+    this.write(line.getBytes("UTF-8"));
+  }
+
+  public void write(byte[] line) throws IOException {
+    // Add the line to our out buffer
+    this.out.put(line);
+
+    // arr[pos:limit] is the enitrety of our untransmitted buffer
+    this.out.flip();
+    this.socket.write(out);
+
+    // arr[pos:limit] is still our untransmitted buffer, pos has been advanced
+    this.out.compact();
   }
 }

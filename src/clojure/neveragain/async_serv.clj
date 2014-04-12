@@ -14,10 +14,12 @@
   the result to its read channel. Vice versa with it's write channel/writer.
   Returns nil if socket has been terminated, true otherwise."
   [[socket r-chan w-chan]]
-    (let [in-line (.readLine socket)]
+    (let [in-line (.readLine socket)
+          [out-line source] (alts!! [w-chan] :default :noop)]
       (if in-line
-        (do (println (str "LINE: " in-line))
-        (>!! r-chan in-line))))
+        (>!! r-chan in-line))
+      (if (not (= out-line :noop))
+        (.write socket out-line)))
     [socket r-chan w-chan])
 
 (defn manage-sockets
@@ -26,11 +28,15 @@
   is available. Sockets will stop being watched when they are closed."
   [new-conns conn-handler]
     (go-loop [conns []]
+      ; Yeild for a second as to not blaze through at 100% CPU usage
+      (Thread/sleep 100)
+
       ; First do our reads and writes
       (let [handled-conns (->> conns
                                (map read-write!)
                                (filter (complement nil?))
                                (doall))
+            ; Then check if we have new sockets to watch.
             [newbie source] (alts! [new-conns] :default :noop)]
         (if-not (= newbie :noop)
           (let [socket (AsyncSocket. newbie)
@@ -59,7 +65,7 @@
 (defn echo-handler
   [r-chan w-chan]
   (go-loop [read-val (<! r-chan)]
-    (>! w-chan (str read-val " desu!\r\n"))
+    (>! w-chan (apply str read-val " desu!\r\n"))
     (recur (<! r-chan))))
 
 (defn -main [& args]
