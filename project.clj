@@ -17,7 +17,7 @@
     [selmer "0.5.7"]
     [less-awful-ssl "0.1.1"]]
   :plugins [[lein-ring "0.7.1"]]
-  :main ^:skip-aot neveragain.core
+  :main ^:skip-aot neveragain.async-serv
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}}
   :source-paths ["src/clojure"]
