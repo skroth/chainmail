@@ -4,7 +4,7 @@
     (neveragain
       [common :refer :all]
       [settings :as settings]
-      rfc auth tls))
+      rfc auth tls x-cm-login))
   (:import
     (java.util.concurrent Executors)
     (javax.net.ssl SSLSocket)
@@ -34,6 +34,7 @@
   neveragain.rfc/extension-description
   neveragain.auth/extension-description
   neveragain.tls/extension-description
+  neveragain.x-cm-login/extension-description
 ])
 
 (def verb-handler-map (rewrite-ehlo (reduce

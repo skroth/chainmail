@@ -42,6 +42,16 @@
 (defn get-hostname []
   (.getHostName (InetAddress/getLocalHost)))
 
+(defn b64s->utf8s 
+  "Takes a base64 encoded string and returns it decoded into a utf-8 string."
+  [s]
+  (String. (b64/decode (.getBytes s "UTF-8")) "UTF-8"))
+
+(defn bytes->b64s
+  "Takes a byte or character array and returns a base64 encoded string."
+  [byte-arr]
+  (String. (b64/encode byte-arr) "UTF-8"))
+
 (defn get-user-record
   "Takes a string representing a single address and returns the full record of
   the user holding that mailbox."
@@ -161,6 +171,22 @@
   (let [rbytes (byte-array num-bytes)]
     (.nextBytes (SecureRandom.) rbytes)
     rbytes))
+
+(defn eg-encrypt 
+  "ElGamal encrypts an array of bytes using pub-key and returns the encrypted
+  byte array."
+  [message pub-key]
+  (let [elgamal-cipher (Cipher/getInstance "ElGamal/None/NoPadding" "BC")]
+    (.init elgamal-cipher Cipher/ENCRYPT_MODE pub-key)
+    (block-proc elgamal-cipher message)))
+
+(defn eg-decrypt 
+  "ElGamal decrypts an array of bytes using priv-key and returns the decrypted
+  byte array."
+  [message priv-key]
+  (let [elgamal-cipher (Cipher/getInstance "ElGamal/None/NoPadding" "BC")]
+    (.init elgamal-cipher Cipher/DECRYPT_MODE priv-key)
+    (block-proc elgamal-cipher message)))
 
 (defn encrypt-message [message pub-key]
   "Encrypt a message and return the cipher text and an encrypted AES key (the
