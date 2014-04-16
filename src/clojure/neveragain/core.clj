@@ -4,10 +4,12 @@
     (neveragain
       [common :refer :all]
       [settings :as settings]
-      rfc auth tls x-cm-login))
+      rfc auth tls x-cm-login)
+    (less.awful [ssl :as las]))
+
   (:import
     (java.util.concurrent Executors)
-    (javax.net.ssl SSLSocket)
+    (javax.net.ssl SSLSocket SSLServerSocket)
     (java.net ServerSocket InetAddress)
     (java.util.concurrent Executors)
     (java.io PrintWriter)
@@ -76,15 +78,19 @@
             (= response nil) nil
             :else (recur response inner-conn)))))))
 
-(defn serve-forever [port-number thread-count]
-  (let [serv-socket (ServerSocket. port-number)
-      thread-pool (Executors/newFixedThreadPool thread-count)]
-    (println (str "Serving on port " port-number))
-    (println settings/banner)
+(defn serve-forever [serv-socket thread-count]
+  (let [thread-pool (Executors/newFixedThreadPool thread-count)]
+    (println (str "Serving on port " (.getLocalPort serv-socket)))
     (while (= 1 1)
       (let [client-socket (.accept serv-socket)
           conn (make-conn client-socket)]
         (.execute thread-pool (fn [] (handle-conn conn)))))))
 
 (defn -main [& args]
-  (serve-forever settings/smtp-port settings/thread-count))
+  (println settings/banner)
+  (def tls-server (future (serve-forever (las/server-socket (las/ssl-context
+                           (:key settings/keyfiles)
+                           (:cert settings/keyfiles)
+                           (:ca settings/keyfiles)) "localhost" settings/tls-smtp-port) settings/thread-count)))
+  (serve-forever (ServerSocket. settings/smtp-port) settings/thread-count)
+  (deref tls-server))
