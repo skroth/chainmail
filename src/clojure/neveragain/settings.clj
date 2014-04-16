@@ -13,6 +13,7 @@
 
 (def thread-count 1)
 (def smtp-port 2500)
+(def tls-smtp-port 4650)
 (def salt-factor 10)
 (def controlled-domains #{"neveraga.in"
                           "lannysport.net"
