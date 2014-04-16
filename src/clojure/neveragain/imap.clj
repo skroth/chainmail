@@ -2,35 +2,32 @@
   (:require
     (clojure [string :as string]
              [set :as set-lib])
+    (clojure.core [async :refer [>! <! >!! alts! go go-loop]])
     (swiss [arrows :refer :all])
     (clojure.java [jdbc :as j])
     (neveragain [common :as common]
                 [settings :as settings]
                 [addresses :as addresses]
-                [core :as smtp-core]))
+                [async-serv :as as]))
   (:import
     (org.mindrot.jbcrypt BCrypt)))
 
 (defn wrap-pure-imap-verb [func]
-  (fn [tag conn args session]
-    (let [{resp :response session :session} (func args session)]
-      (cond
-       (sequential? resp)
-         (loop [[line & remaining] resp]
-           (if (not (empty? remaining))
-             (do
-               (.println (:out conn)
-                         (str "* " line "\r\n"))
-               (recur remaining))
-             (do
-               (.println (:out conn)
-                         (str tag " " line "\r\n"))
-               (.flush (:out conn)))))
+  (fn [session r-chan w-chan [_ tag _ args]]
+    (let [{response :response new-session :session} (func args session)]
+      (if (sequential? response)
+        ; If the wrapped function returned a list or vector send each as a
+        ; seperate line with the last one being prefixed by this req's tag.
+        (loop [[line & remaining] response]
+          (if (empty? remaining)
+            (>!! w-chan (str tag \space line "\r\n"))
+            (do
+              (>!! w-chan (str "* " line "\r\n"))
+              (recur remaining))))
+        ; Otherwise just send it as it is
+        (>!! w-chan (str response "\r\n")))
+      new-session)))
 
-       (not (empty? resp))
-         (common/write-out (:out conn)
-                           (str tag " " resp "\r\n")))
-      session)))
 
 (defmacro require-state 
   "Wraps a pure verb handler to prevent the handler from being executed if 
@@ -301,3 +298,21 @@
        (re-matches #"" args)
      nil))))
 
+(def handler-map {"LOGIN" (wrap-pure-imap-verb login)
+                  "SELECT" (wrap-pure-imap-verb select)})
+
+(defn connection-handler
+  [r-chan w-chan]
+  (go-loop [read-val (<! r-chan)
+            session {}]
+    (let [[line tag verb args] (re-matches #"(.+?)\s(\S+)\s(.+)" read-val)
+          handler (get handler-map verb)
+          new-session (handler session r-chan w-chan [line tag verb args])]
+      (recur (<! r-chan) new-session))))
+
+(defn serve-forever
+  [port]
+  (as/serve-forever port connection-handler))
+
+(defn -main [& args]
+  (serve-forever 1337))
