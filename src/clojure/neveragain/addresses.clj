@@ -131,8 +131,8 @@
   (format "%s@%s" (:box_name user-record) (:hostname user-record)))
 
 (defn addr-equality [addr-one addr-two]
-  "Accepts two string, parses them, and returns true if they both identify the
-   same mailbox, false otherwise."
+  "Accepts two strings, parses them, and returns true if they both identify 
+  the same mailbox, false otherwise."
   (let [parsed-one (parse-addr-spec addr-one)
         parsed-two (parse-addr-spec addr-two)]
     (and (apply = (map :norm-box-name [parsed-one parsed-two]))

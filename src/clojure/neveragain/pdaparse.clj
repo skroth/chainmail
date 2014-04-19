@@ -134,9 +134,11 @@
         will-pop (not (ε? s-sym))
         capture-close (= :ω s-sym)
         i-string (cond
-                   (nil? input-string) '()
-                   will-read input-string 
-                   :else (conj input-string next-sym))
+                   (and (not will-read) (nil? next-sym))
+                     '()
+                   (not will-read)
+                     (conj input-string next-sym)
+                   will-read input-string)
         stack (if will-pop (rest stack) stack)
         stack (εconj stack (if will-capture :ω :ε))
         stack (εpush (if (= p-sym :<>) next-sym p-sym) stack)

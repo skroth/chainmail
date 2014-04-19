@@ -341,36 +341,47 @@
                     "\r\n.\r\n"
                     "\r\n .\r\n"))))
 
-(defn rewrite-for-forwarding [envl user forwarding-address]
-  "Encrypts a plaintext envelope and wraps it in a secondary envelope to be
-  transmitted to a third party email provider. Returns modified envelope."
-  (let [pub-key (deserialize-pub-key (:elgamal_pub_key user))
-        [cipher-text enc-key iv] (encrypt-message (:data envl) pub-key)
-        tutivillus (str "tutivillus@" (get-hostname))
+(defn daemon-wrap 
+  "Takes a message in a form as in the database, renders it in the ChainMail
+  transit format, and wraps it as an IMF message from the mailer daemon."
+  [message new-to-address]
+  (let [tutivillus (str "tutivillus@" (get-hostname))
         headers {:Content-Transfer-Encoding "7bit"
                  :Content-Type "text/plain; charset=utf-8"
                  :Date (strftime "%a, %d %b %Y %H:%M:%S %Z" (Date.))
                  :From (str "Chainmail Mailer Daemon <" tutivillus ">")
                  :MIME-Version "1.0"
                  :Subject "Forwarded Ciphertext Contained Within"
-                 :To forwarding-address
-                 :User-Agent "Chainmail/Daemon" }
-        body (str
-              "Below is an encrypted message sent to " (:address user) "@"
-              (:hostname user) ". No further information is available until the "
-              "message has been decrypted. To do so you'll need to install a "
-              "chainmail integration plugin available at <OUR ADDRESS> and have your "
-              "private key on hand.\r\n"
-              "=== BEGIN CHAINMAIL DATA ===\r\n"
-              (json/write-str
-               {:protocol_version "0.1"
-                :data (apply str (map char (b64/encode cipher-text)))
-                :aes_key (apply str (map char (b64/encode enc-key)))
-                :iv (apply str (map char (b64/encode iv)))
-                :recv_date (quot (System/currentTimeMillis) 1000) }))]
-    {:from tutivillus
+                 :To new-to-address
+                 :User-Agent "Chainmail/Daemon"}
+        body (str "Below is an encrypted message. No further information is "
+                  "available until the message has been decrypted. To do so "
+                  "you'll need to install a chainmail integration plugin "
+                  "available at <OUR ADDRESS> and have your private key on "
+                  "hand.\r\n"
+                  "=== BEGIN CHAINMAIL DATA ===\r\n"
+                  (json/write-str
+                   {:protocol_version "0.1"
+                    :data (:data message)
+                    :aes_key (:aes_key message)
+                    :iv (:iv message)
+                    :recv_date (:recv_date message)}))]
+    (prep-2822-message headers body)))
+
+
+
+(defn rewrite-for-forwarding [envl user forwarding-address]
+  "Encrypts a plaintext envelope and wraps it in a secondary envelope to be
+  transmitted to a third party email provider. Returns modified envelope."
+  (let [pub-key (deserialize-pub-key (:elgamal_pub_key user))
+        [cipher-text enc-key iv] (encrypt-message (:data envl) pub-key)
+        message {:data (apply str (map char (b64/encode cipher-text)))
+                 :aes_key (apply str (map char (b64/encode enc-key)))
+                 :iv (apply str (map char (b64/encode iv)))
+                 :recv_date (quot (System/currentTimeMillis) 1000) }]
+    {:from (str "tutivillus@" (get-hostname))
      :to [forwarding-address]
-     :data (prep-2822-message headers body) }))
+     :data (daemon-wrap message forwarding-address)}))
 
 (defn relay-message [envl recipient]
   "Accepts an envelope and a single recipient, then acts as a SMTP client,

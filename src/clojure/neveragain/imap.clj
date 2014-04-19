@@ -289,17 +289,54 @@
                 (set-lib/intersection message-fields))
          :else nil)])))
 
-(require-state #{"selected"}
-  (defn fetch
-    ([args session]
-     (fetch args session settings/db))
-    ([args session db]
-     (cond
-       (re-matches #"" args)
-     nil))))
+(def message-by-recipient-seq 
+  "SELECT data, aes_key, iv, recv_date FROM messages 
+  WHERE 
+    recipient_id = ? AND
+    seq_num = ?
+  LIMIT 1;")
 
-(def handler-map {"LOGIN" (wrap-pure-imap-verb login)
-                  "SELECT" (wrap-pure-imap-verb select)})
+(require-state #{"selected"}
+(defn fetch
+  ([args session]
+   (fetch args session settings/db))
+  ([args session db]
+   (let [[seq-nums fields] (parse-fetch-args args)
+         box-id (:selected-box session)]
+     (if-not (and seq-nums fields)
+       {:response "BAD Malformed FETCH arguments."
+        :session session}
+       (loop [[cur-num & remaining] seq-nums
+              response []]
+         (if-not cur-num
+           {:session session
+            :response (conj response "OK FETCH completed")}
+
+           ; Ignore fields for the moment, it's not worth diceing up wrapped
+           ; messages on the server. The client can worry about it.
+           (let [record (->> [message-by-recipient-seq box-id cur-num]
+                             (j/query db)
+                             (first))
+                 wrapped (common/daemon-wrap record 
+                                             (addresses/c-addr (:user session)))
+                 wrapped-len (alength (.getBytes wrapped "UTF-8"))
+                 resp (format "%d FETCH (BODY {%d}%s)" 
+                              cur-num wrapped-len wrapped)]
+             (if-not record
+               {:session session
+                :response (format (str "BAD No message in this inbox with "
+                                       "sequence number %d.")
+                                  cur-num)}
+               (recur remaining (conj response resp)))))))))))
+
+(def handler-map {"NOOP" (wrap-pure-imap-verb noop)
+                  "LOGIN" (wrap-pure-imap-verb login)
+                  "SELECT" (wrap-pure-imap-verb select)
+                  "CREATE" (wrap-pure-imap-verb create)
+                  "DELETE" (wrap-pure-imap-verb delete)
+                  "SUBSCRIBE" (wrap-pure-imap-verb subscribe)
+                  "FETCH" (wrap-pure-imap-verb fetch)
+                  "LOGOUT" (wrap-pure-imap-verb logout)})
 
 (defn connection-handler
   [r-chan w-chan]
