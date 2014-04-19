@@ -62,7 +62,6 @@
        "unbind themselves form the earth and take to the sky, above "
        "or about canines!"))
 
-
 (deftest test-prep-2822-message
   (let [res (common/prep-2822-message {:Content-Type "text/plain"}
                                       long-body)]

@@ -162,6 +162,7 @@
                               :user user
                               :subscriptions #{}}
                              test-db)]
+    (println (:response case-one))
     (is (re-matches #"BAD.*" (:response case-two)))
     (is (re-matches #"OK.*" (-> case-one :response last)))
     (is (= (count (:response case-one)) 2))

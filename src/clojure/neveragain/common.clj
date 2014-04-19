@@ -314,17 +314,25 @@
 
 (defn next-line [s len]
   (let [[t-line remaining] (safe-chop s len)
-        chop-i (+ 1 (.lastIndexOf (String. t-line) " "))]
-    (if (< chop-i 1)
-      [t-line remaining]
-      (safe-chop s chop-i))))
+        ss (String. t-line)
+        chop-i (max (.lastIndexOf ss " ")
+                    (.lastIndexOf ss "\r\n"))]
+    (cond 
+      (neg? chop-i)
+        [(str t-line "\r\n ") remaining]
+      (= chop-i (.lastIndexOf ss "\r\n"))
+        ; If we're chopping at a newline this is a semantic split, so we dont
+        ; make the linebreak folded.
+        (let [[l ls] (safe-chop s (inc chop-i))] [(str l "\r\n") ls])
+      :else
+        (let [[l ls] (safe-chop s (inc chop-i))] [(str l "\r\n ") ls]))))
 
 (defn break-lines [s line-length]
   (loop [lines []
          [line s-left] (next-line s line-length)]
     (if (seq s-left)
       (recur (conj lines line) (next-line s-left line-length))
-      (string/join "\r\n" (conj lines line)))))
+      (string/join "" (conj lines line)))))
 
 (defn prep-2822-message [headers body]
   "Prepare a message for transmission per the RFC 2822 spec. Takes a string to
