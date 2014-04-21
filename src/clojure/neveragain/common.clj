@@ -52,6 +52,15 @@
   [byte-arr]
   (String. (b64/encode byte-arr) "UTF-8"))
 
+(defn strip-quotes
+  "Returns input unless the first and last characters are double quotes, in
+  which case the input without quotes is returned"
+  [s]
+  (if (and (= (first s) \")
+           (= (last s) \"))
+    (.substring s 1 (dec (count s)))
+    s))
+
 (defn get-user-record
   "Takes a string representing a single address and returns the full record of
   the user holding that mailbox."

@@ -25,7 +25,7 @@
               (>!! w-chan (str "* " line "\r\n"))
               (recur remaining))))
         ; Otherwise just send it as it is
-        (>!! w-chan (str response "\r\n")))
+        (>!! w-chan (str tag \space response "\r\n")))
       new-session)))
 
 
@@ -66,7 +66,7 @@
 
 (defn capability [args session]
   {:session session
-   :response ["IMAP4rev1 AUTH=PLAIN"
+   :response ["CAPABILITY IMAP4rev1 STARTTLS LOGIN"
               "OK CAPABILITY completed"]})
 
 (require-state #{nil}
@@ -74,14 +74,17 @@
   ([args session]
    (login args session settings/db))
   ([args session db]
-    (let [[_ username password] (re-matches #"^(\S+|\".+\"\S+) (\S+)$" args)]
+    (let [[_ username password] (re-matches #"^(\S+|\".+\"\S+) (\S+)$" args)
+          username (common/strip-quotes username)
+          password (common/strip-quotes password)]
       (if-not (and username password)
         {:response "BAD LOGIN should be of the form `LOGIN USERNAME PASSWORD`."
          :session session}
         (let [user (common/get-user-record username db)]
           (cond
             (not user)
-             {:response "NO No such user here."
+             {:response (format "NO \"%s\" is not a knight of THIS table."
+                                username)
               :session session}
             (not (BCrypt/checkpw password (:hashword user)))
              {:response "NO Account recognized but password did not match."
