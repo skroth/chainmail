@@ -64,6 +64,11 @@
                 "OK LOGOUT complete."]
      :session nil}))
 
+(defn capability [args session]
+  {:session session
+   :response ["IMAP4rev1 AUTH=PLAIN"
+              "OK CAPABILITY completed"]})
+
 (require-state #{nil}
 (defn login 
   ([args session]
@@ -329,7 +334,17 @@
                                   cur-num)}
                (recur remaining (conj response resp)))))))))))
 
+(def null-verb
+  (wrap-pure-imap-verb
+    (fn 
+      ([args session db]
+       (fetch args session))
+      ([args session]
+       {:response "BAD No such verb."
+        :session session}))))
+
 (def handler-map {"NOOP" (wrap-pure-imap-verb noop)
+                  "CAPABILITY" (wrap-pure-imap-verb capability)
                   "LOGIN" (wrap-pure-imap-verb login)
                   "SELECT" (wrap-pure-imap-verb select)
                   "CREATE" (wrap-pure-imap-verb create)
@@ -340,10 +355,12 @@
 
 (defn connection-handler
   [r-chan w-chan]
+  (>!! w-chan 
+       "* OK Hail! ChainMail IMAP server at thine service my liege!\r\n")
   (go-loop [read-val (<! r-chan)
             session {}]
-    (let [[line tag verb args] (re-matches #"(.+?)\s(\S+)\s(.+)" read-val)
-          handler (get handler-map verb)
+    (let [[line tag verb args] (re-matches #"(.+?)\s(\S+)\s?(.+)?" read-val)
+          handler (get handler-map (.toUpperCase verb) null-verb)
           new-session (handler session r-chan w-chan [line tag verb args])]
       (recur (<! r-chan) new-session))))
 

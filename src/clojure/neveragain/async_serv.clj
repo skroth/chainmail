@@ -17,9 +17,11 @@
     (let [in-line (.readLine socket)
           [out-line source] (alts!! [w-chan] :default :noop)]
       (if in-line
-        (>!! r-chan in-line))
+        (do (println "C: " in-line)
+        (>!! r-chan in-line)))
       (if (not (= out-line :noop))
-        (.write socket out-line)))
+        (do (println "S: " out-line)
+        (.write socket out-line))))
     [socket r-chan w-chan])
 
 (defn manage-sockets
