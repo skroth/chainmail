@@ -20,6 +20,7 @@ function InboxModel() {
   self.key = ko.observable(null)
   self.statusText = ko.observable('transfering messages')
 
+  self.composeDialogs = ko.observableArray()
   self.activeMessageSet = ko.observable(self.messageSets.inbox)
   self.activeMessageSet.subscribe(function(newSet) {
     self.statusText('transfering messages')
@@ -109,29 +110,8 @@ function InboxModel() {
     argument is omitted the compose modal will be activated without touching its
     state, othewise all fields will be emptied and populated with data specified
     by an object passes as the first arg */
-    if (preloadData !== undefined) {
-      self.envl.to(preloadData.to || '')
-      self.envl.subject(preloadData.subject || '')
-      self.envl.body(preloadData.body || '')
-    }
-
-    $('#compose-modal').foundation('reveal', 'open')
-  }
-
-  self.send = function() {
-    var message = 'Content-Transfer-Encoding: "8bit"\r\n' +
-      'Content-Type: "text/plain; charset=utf-8"\r\n' +
-      'Date: ' + strftime('%a, %d %b %Y %H:%M:%S %Z', new Date()) + '\r\n' +
-      'From: "' + self.me.realname + ' <' + self.me.address + '>"\r\n' +
-      'MIME-Version: "1.0"\r\n' +
-      'Message-ID: "<' + Date.now() + '.' + Math.random().toString().substr(2) +
-        '@' + self.me.address.split('@')[1] + '>"\r\n' +
-      'Subject: "' + self.envl.subject().replace(/[\r\n]/gi, '') + '"\r\n' +
-      'To: "' + self.envl.to() + '"\r\n' +
-      'User-Agent: "Chainmail/WebClient"\r\n' +
-      '\r\n' + transmitEncode(self.envl.body())
-
-    $.post('/send', { content: message })
+    var cm = new composeModel(preloadData)
+    self.composeDialogs.push(cm)
   }
 
   self.closeCompose = function() {
@@ -155,6 +135,44 @@ function InboxModel() {
 
   }
 
+}
+
+function composeModel(preloadData) {
+  var self = this
+
+  self.to = ko.observableArray()
+  self.subject = ko.observable()
+  self.body = ko.observable()
+
+  self.title = ko.computed(function() {
+    return self.subject()?self.subject():'New Message'
+  })
+
+  self.send = function(root) {
+    var message = 'Content-Transfer-Encoding: "8bit"\r\n' +
+      'Content-Type: "text/plain; charset=utf-8"\r\n' +
+      'Date: ' + strftime('%a, %d %b %Y %H:%M:%S %Z', new Date()) + '\r\n' +
+      'From: "' + root.me.realname + ' <' + root.me.address + '>"\r\n' +
+      'MIME-Version: "1.0"\r\n' +
+      'Message-ID: "<' + Date.now() + '.' + Math.random().toString().substr(2) +
+        '@' + root.me.address.split('@')[1] + '>"\r\n' +
+      'Subject: "' + self.subject().replace(/[\r\n]/gi, '') + '"\r\n' +
+      'To: "' + self.to() + '"\r\n' +
+      'User-Agent: "Chainmail/WebClient"\r\n' +
+      '\r\n' + transmitEncode(self.body())
+
+    $.post('/send', { content: message })
+  }
+
+  self.close = function(root) {
+    root.composeDialogs.remove(self)
+  }
+
+  if (preloadData !== undefined) {
+      self.to(preloadData.to || [])
+      self.subject(preloadData.subject || '')
+      self.body(preloadData.body || '')
+  }
 }
 
 

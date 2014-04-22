@@ -122,32 +122,50 @@
     </div>
 
     <a class="exit-off-canvas"></a>
+
+    <div class="compose-dialogs"
+         data-bind="foreach: composeDialogs">
+      <div class="compose-dialog-positioner">
+      <div class="compose-dialog sub-win">
+        <div class="sub-win-title">
+          <span data-bind="text: title()"></span>
+          <a class="close right" href="#" 
+             data-bind="click: function(){ $data.close($root) }">
+            &times;
+          </a>
+        </div>
+
+        <label class="input-bar">
+          <span>To:</span>
+          <div class="input-container">
+            <input type="text" data-bind="value: to" />
+          </div>
+        </label>
+
+        <label class="input-bar">
+          <span>Subject:</span>
+          <div class="input-container">
+            <input type="text" data-bind="value: subject" />
+          </div>
+        </label>
+
+        <textarea class="compose-body" cols="24" rows="20" 
+                  data-bind="value: body">
+        </textarea>
+
+        <div class="sub-win-frame-bar compose-actions">
+          <a class="button small" 
+             data-bind="click: function(){$data.send($root)}" 
+             href="#">Send</a>
+        </div>
+      </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <div id="status-text" data-bind="text: statusText, 
   style: { display: statusText()?'block':'none' }">
-</div>
-
-<div id="compose-modal" class="reveal-modal medium" data-reveal>
-	<h2>Compose</h2>
-  <label>
-    To:
-    <input type="text" class="compose-to" data-bind="value: envl.to" />
-  </label>
-  <label>
-    Subject:
-    <input type="text" class="compose-subject" data-bind="value: envl.subject" />
-  </label>
-  <textarea class="compose-body" cols="24" data-bind="value: envl.body">
-  </textarea>
-
-  <ul class="button-group right">
-    <li><a class="button" data-bind="click: $root.send" href="#">Send</a></li>
-    <li>
-	    <a class="button alert" href="#" data-bind="click: closeCompose">Cancel</a>
-    </li>
-  </ul>
 </div>
 
 {% endblock %}
