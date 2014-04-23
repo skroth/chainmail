@@ -162,7 +162,6 @@
                               :user user
                               :subscriptions #{}}
                              test-db)]
-    (println (:response case-one))
     (is (re-matches #"BAD.*" (:response case-two)))
     (is (re-matches #"OK.*" (-> case-one :response last)))
     (is (= (count (:response case-one)) 2))
@@ -171,3 +170,22 @@
       (is (= (Integer/parseInt size) 
              (alength (.getBytes message "UTF-8")))))))
     
+(re-matches #"^LIST \(\) \"#users\" \"(.+)\"$" "LIST () \"#users\" \"RECENT\"")
+
+(deftest test-imap-list
+  (let [session {:state "authenticated"
+                 :user (common/get-user-record "lanny@neveraga.in" test-db)}
+        cases [["\"\" \"INBOX\"" #{"INBOX"}]
+               ["\"\" \"*\"" #{"INBOX" "RECENT"}]
+               ["\"lol\" \"INBOX\"" #{}]
+               ["\"\" \"squid\"" #{}]]]
+    (loop [[[args return] & remaining] cases]
+      (let [{response :response} (imap/list-verb args session test-db)]
+        (is (= (count response) (inc (count return))))
+        (doall
+          (for [line (butlast response)]
+            (is (->> line 
+                     (re-matches #"^LIST \(\) \"#users\" \"(.+)\"$")
+                     (second)
+                     (contains? return))))))
+      (if (not (empty? remaining)) (recur remaining)))))

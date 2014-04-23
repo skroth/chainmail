@@ -49,6 +49,16 @@
                (do ~@body))))
         func))))
 
+(defn wrap-require-state 
+  [ok-states func]
+  (fn [args session]
+    (if-not (contains? ok-states (:state session))
+      {:response (format (str "BAD This command requires one of the "
+                              "following states: %s")
+                   (string/join ", " ok-states))
+       :session session}
+      (func args session))))
+
 (defn noop [args session]
   (if args
     {:response "BAD NOOP accepts no arguments."
@@ -337,6 +347,64 @@
                                   cur-num)}
                (recur remaining (conj response resp)))))))))))
 
+(def select-mailbox-sql 
+  "SELECT * FROM platonic_tags WHERE owner_id = ? AND name = ?;") 
+
+(def select-all-mailboxes-sql 
+  "SELECT * FROM platonic_tags 
+    WHERE 
+      owner_id = ? AND 
+      (name = ? OR 1);") 
+
+(defn box->tag
+  "Given a mailbox name per IMAP's idea of mailboxes, return an internal tag
+  name."
+  [s]
+  (let [norm (str "MB-" (.toUpperCase s))]
+    (cond
+      (= norm "MB-INBOX") "\\Inbox"
+      (= norm "MB-*") "*"
+      (= norm "MB-%") "*"
+      :else norm)))
+
+(defn tag->box
+  "Given an internal tag name return an IMAP mailbox name that would normalize
+  to it."
+  [s]
+  (let [[_ _ tag-style mb-style wierd] (re-matches #"(\\(.+)|MB-(.+)|(.+))" s)
+        norm (.toUpperCase (or tag-style mb-style wierd))]
+    norm))
+
+(require-state #{"authenticated" "selected"}
+(defn list-verb
+  ([args session]
+   (list-verb args session settings/db))
+  ([args session db]
+   (let [[left-part right-part & remaining] (addresses/quote-atom-split args)
+         left-part (common/strip-quotes left-part)
+         right-part (common/strip-quotes right-part)
+         tag-name (->> [left-part right-part]
+                       (filter (fn [x] (pos? (count x))))
+                       (string/join "." )
+                       (box->tag))]
+     (cond
+       (not (and left-part right-part))
+         {:session session
+          :response "BAD Hark knave, thou laketh in arguments!"}
+       (not (empty? remaining))
+         {:session session
+          :response "BAD Hark knave, thou hath inundated me with arguments!"}
+       :else
+         (let [sql (if (= tag-name "*") 
+                     select-all-mailboxes-sql 
+                     select-mailbox-sql)
+               records (j/query db [sql (-> session :user :id) tag-name])
+               lines (for [box records] (str "LIST () \"#users\" \""
+                                             (tag->box (:name box)) \"))]
+           {:session session
+            :response (conj (into [] lines) 
+                            "OK LIST completed, my liege.")}))))))
+
 (def null-verb
   (wrap-pure-imap-verb
     (fn 
@@ -351,6 +419,7 @@
                   "LOGIN" (wrap-pure-imap-verb login)
                   "SELECT" (wrap-pure-imap-verb select)
                   "CREATE" (wrap-pure-imap-verb create)
+                  "LIST" (wrap-pure-imap-verb list-verb)
                   "DELETE" (wrap-pure-imap-verb delete)
                   "SUBSCRIBE" (wrap-pure-imap-verb subscribe)
                   "FETCH" (wrap-pure-imap-verb fetch)
