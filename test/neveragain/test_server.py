@@ -80,6 +80,15 @@ Best regards on the matter of %s %s,
 
   return m
 
+nice = {
+    'from': 'Susan Sealy',
+    'to': 'Lan Rogers <lanny@neveraga.in>',
+    'subject': 'Gasket Failure at the Pattern Factory',
+    'body': ('Just writing to tell you those widgets were TOP NOTCH '
+        'ENTERPRISE QUALITY widgets and I look forward to purchasing '
+        'more in the near future.\n\nYour\'s faithfully\nThe Nance')
+}
+
 scripts = {
   'relay_script': [
     'EHLO [localhost]\r\n',
@@ -89,7 +98,7 @@ scripts = {
     'MAIL FROM:<lanny@neveraga.in>\r\n',
     'RCPT TO:<lan.rogers.book@gmail.com>\r\n',
     'DATA\r\n',
-    generate_pasta_message({'to': 'lan.rogers.book@gmail.com', 'from': 'lanny@neveraga.in'}),
+    #generate_pasta_message({'to': 'lan.rogers.book@gmail.com', 'from': 'lanny@neveraga.in'}),
     'QUIT\r\n'
   ], 
   'endpoint_single_user': [
@@ -97,7 +106,8 @@ scripts = {
     'MAIL FROM:<lan.rogers.book@gmail.com>\r\n',
     'RCPT TO:<lanny@neveraga.in>\r\n',
     'DATA\r\n',
-    generate_pasta_message({'to': 'lanny@neveraga.in'}),
+    #generate_pasta_message({'to': 'lanny@neveraga.in'}),
+    generate_pasta_message(nice),
     'QUIT\r\n'
   ]}
 

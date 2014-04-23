@@ -126,12 +126,18 @@
     <div class="compose-dialogs"
          data-bind="foreach: composeDialogs">
       <div class="compose-dialog-positioner">
-      <div class="compose-dialog sub-win">
+      <div class="compose-dialog sub-win"
+           data-bind="css: { 'minimized': minimized() }">
         <div class="sub-win-title">
           <span data-bind="text: title()"></span>
-          <a class="close right" href="#" 
+
+          <a class="sub-win-title-button right" href="#" 
              data-bind="click: function(){ $data.close($root) }">
             &times;
+          </a>
+          <a class="sub-win-title-button right" href="#" 
+             data-bind="click: $data.toggleMin,
+                        html: minimized()?'+':'&ndash;'">
           </a>
         </div>
 

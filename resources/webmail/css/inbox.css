@@ -65,13 +65,22 @@
   background-color: white;
   border: 1px solid grey;
 }
+.sub-win.minimized > * { display: none; }
+.sub-win.minimized > .sub-win-title { display: block; }
 .sub-win-title {
   background-color: #333;
   color: rgba(255,255,255,0.7);
   padding: .7em;
 }
-.sub-win-title .close {
+.sub-win-title-button {
   color: rgba(255,255,255,0.7);
+  text-align: center;
+  width: 1em;
+  margin-left: 5px;
+}
+.sub-win-title-button:hover {
+  color: rgba(255,255,255,0.7);
+  border-bottom: 2px solid rgba(255,255,255,0.7);
 }
 .sub-win-frame-bar {
   width: 100%;

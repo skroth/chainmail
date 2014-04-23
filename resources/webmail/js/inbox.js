@@ -85,12 +85,6 @@ function InboxModel() {
   // keyboard)
   self.me = null
 
-  self.envl = {
-    to: ko.observable(),
-    subject: ko.observable(),
-    body: ko.observable()
-  }
-
   self.setActiveMessage = function(message) {
     self.activeMessage(message)
   }
@@ -143,10 +137,15 @@ function composeModel(preloadData) {
   self.to = ko.observableArray()
   self.subject = ko.observable()
   self.body = ko.observable()
+  self.minimized = ko.observable(false)
 
   self.title = ko.computed(function() {
     return self.subject()?self.subject():'New Message'
   })
+
+  self.toggleMin = function() {
+    self.minimized(!self.minimized())
+  }
 
   self.send = function(root) {
     var message = 'Content-Transfer-Encoding: "8bit"\r\n' +
