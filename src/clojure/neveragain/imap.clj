@@ -125,95 +125,118 @@
               :session (merge session {:user user
                                        :state "authenticated"})})))))))
 
-(def inbox-count-sql "SELECT COUNT(*) AS count 
-                      FROM messages 
-                      WHERE recipient_id = ?;")
+(def mailbox-count-sql "SELECT COUNT(*) AS count
+                       FROM tags
+                       WHERE 
+                         owner_id = ? AND
+                         name = ?;")
 
 (def recent-count-sql "SELECT COUNT(*) AS count 
-                       FROM messages 
-                       INNER JOIN tags ON
-                         messages.id = tags.message_id
+                       FROM tags AS tags1
+                       JOIN tags AS tags2 ON
+                         tags1.message_id = tags2.message_id
                        WHERE
-                         tags.name = \"\\Recent\" AND
-                         messages.recipient_id = ?;")
+                         tags1.owner_id=? AND
+                         tags1.name=? AND
+                         tags2.name='\\Recent';")
 
-(def clear-recent-sql "DELETE FROM tags
+(def clear-recent-sql "DELETE FROM tags 
                        WHERE
-                         owner_id = ? AND
-                         name = \"\\Recent\";")
+                        id IN (
+                          SELECT t1.id FROM tags AS t1
+                          JOIN tags AS t2 ON
+                            t1.message_id = t2.message_id
+                          WHERE
+                            t1.name = '\\Recent' AND
+                            t1.owner_id = ? AND
+                            t2.name = ?);")
 
 ; All messages in a box without the \Seen tag on them
-(def unread-count-sql "SELECT COUNT(*) AS count FROM messages 
-                       LEFT OUTER JOIN tags ON 
-                         messages.id = tags.message_id AND 
-                         tags.name=\"\\Seen\" 
+(def unread-count-sql "SELECT COUNT(*) AS count 
+                       FROM tags AS tags1 
+                       LEFT OUTER JOIN tags AS tags2 ON 
+                         tags1.message_id = tags2.message_id AND 
+                         tags2.name=\"\\Seen\" 
                        WHERE 
-                         tags.id IS NULL AND
-                         messages.recipient_id = ?;")
+                         tags2.id IS NULL AND
+                         tags1.owner_id = ? AND
+                         tags1.name = ?;")
 
 (def first-unread-seq-num-sql "SELECT seq_num FROM messages 
-                               LEFT OUTER JOIN tags ON 
-                                 messages.id = tags.message_id AND 
-                                 tags.name=\"\\Seen\" 
+                               LEFT OUTER JOIN tags AS tags1 ON 
+                                 messages.id = tags1.message_id AND 
+                                 tags1.name=\"\\Seen\" 
                                WHERE 
-                                 tags.id IS NULL AND
+                                 tags1.id IS NULL AND
                                  messages.recipient_id = ?
-                               ORDER BY seq_num ASC
-                               LIMIT 1;")
+                             INTERSECT
+                               SELECT seq_num FROM messages
+                               JOIN tags AS tags2 ON
+                                 messages.id = tags2.message_id
+                               WHERE
+                                 tags2.name = ? AND
+                                 messages.recipient_id = ?
+                             ORDER BY seq_num ASC
+                             LIMIT 1;")
 
-(def flags-in-mailbox "SELECT DISTINCT name FROM tags 
-                       WHERE owner_id = ?;")
-
-
+(def flags-in-mailbox "SELECT DISTINCT tags2.name 
+                       FROM tags AS tags1
+                       JOIN tags AS tags2 ON
+                         tags1.message_id = tags2.message_id
+                       WHERE 
+                         tags1.owner_id = ? AND
+                         tags1.name = ? AND
+                         tags2.name LIKE '\\%';")
 
 (require-state #{"authenticated" "selected"}
-  (defn select 
-    ([args session]
-     (select args session settings/db))
-    ([args session db]
-     ; Users only have one mailbox, so we don't make the user/mailbox distinction
-     (let [selected-user (common/get-user-record args db)]
-       (cond
-         (not selected-user) 
-           {:response "NO Mailbox does not exist."
-            :session session}
-         (not (= (:id selected-user) (:id (:user session))))
-           {:response "NO That's not your mailbox."
-            :session session}
-         :else 
-           (let [user-id (:id selected-user)
-                 exists-count (->> [inbox-count-sql user-id]
-                                   (j/query db)
-                                   first
-                                   :count)
-                 recent-count (->> [recent-count-sql user-id]
-                                   (j/query db)
-                                   first
-                                   :count)
-                 unseen-seq-num (->> [first-unread-seq-num-sql user-id]
-                                     (j/query db)
-                                     first
-                                     :seq_num)
-                 flags-list (->> [flags-in-mailbox user-id]
+(defn select 
+  ([args session]
+   (select args session settings/db))
+  ([args session db]
+   ; Users only have one mailbox, so we don't make the user/mailbox distinction
+   (let [user-id (-> session :user :id)
+         box-name (box->tag (common/strip-quotes args))
+         selected-box (->> [box-name user-id]
+                           (concat ["SELECT * FROM platonic_tags
+                                    WHERE name=? AND owner_id=?"])
+                           (j/query db)
+                           first)]
+     (if (not selected-box) 
+       {:response "NO Mailbox does not exist."
+        :session session}
+       (let [exists-count (->> [mailbox-count-sql user-id box-name]
+                               (j/query db)
+                               first
+                               :count)
+             recent-count (->> [recent-count-sql user-id box-name]
+                               (j/query db)
+                               first
+                               :count)
+             unseen-seq-num (->> [first-unread-seq-num-sql user-id 
+                                  box-name user-id]
                                  (j/query db)
-                                 (map :name)
-                                 (string/join ", "))]
-             ; We just told the user about all those messages, so clear the
-             ; /Recent flags
-             (if-not (:read-only session)
-               (j/execute! db [clear-recent-sql user-id]))
+                                 first
+                                 :seq_num)
+             flags-list (->> [flags-in-mailbox user-id box-name]
+                             (j/query db)
+                             (map :name)
+                             (string/join ", "))]
+         ; We just told the user about all those messages, so clear the
+         ; /Recent flags
+         (if-not (:read-only session)
+           (j/execute! db [clear-recent-sql user-id box-name]))
 
-             ; And give them our response
-             (let [response [(format "%d EXISTS" exists-count)
-                             (format "%d RECENT" recent-count)
-                             (format "FLAGS (%s)" flags-list)
-                             "OK SELECT command complete"]
-                   unseen-line (format "OK [UNSEEN %d]" unseen-seq-num)]
-               {:response (if unseen-seq-num
-                            (conj response unseen-line)
-                            response)
-                :session (merge session {:selected-box selected-user
-                                         :state "selected"})})))))))
+         ; And give them our response
+         (let [response [(format "%d EXISTS" exists-count)
+                         (format "%d RECENT" recent-count)
+                         (format "FLAGS (%s)" flags-list)
+                         "OK SELECT command complete"]
+               unseen-line (format "OK [UNSEEN %d]" unseen-seq-num)]
+           {:response (if unseen-seq-num
+                        (conj response unseen-line)
+                        response)
+            :session (merge session {:selected-box selected-box
+                                     :state "selected"})})))))))
 
 (require-state #{"authenticated" "selected"}
 (defn examine 
@@ -230,7 +253,7 @@
   ([args session db]
    (let [[tag & xs]  (->> args 
                           addresses/quote-atom-split 
-                          (map common/strip-quotes))]
+                          (map common/strip-quotes)) ]
      (cond 
        (not (empty? xs))
          {:session session

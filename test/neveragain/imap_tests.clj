@@ -82,13 +82,13 @@
 
 (deftest test-imap-select
   (let [user (common/get-user-record "lanny@neveraga.in" test-db)
-        case-one (imap/select "lanny@neveraga.in" 
+        case-one (imap/select "INBOX" 
                               {:user user :state "authenticated"}
                               test-db)
-        case-two (imap/select "lanny@neveraga.in" 
+        case-two (imap/select "INBOX" 
                               {:user  nil :state nil}
                               test-db)
-        case-three (imap/select "frederick@neveraga.in" 
+        case-three (imap/select "squids" 
                               {:user user :state "authenticated"}
                               test-db)]
     (is (sequential? (:response case-one)))
@@ -105,7 +105,7 @@
 
 (deftest test-imap-examine
   (let [user (common/get-user-record "lanny@neveraga.in" test-db)
-        case-one (imap/examine "lanny@neveraga.in" 
+        case-one (imap/examine "INBOX" 
                                {:user user :state "authenticated"}
                                test-db)]
     (is (= (-> case-one :session :state) "selected"))
