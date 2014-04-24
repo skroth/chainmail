@@ -12,6 +12,8 @@
   (:import
     (org.mindrot.jbcrypt BCrypt)))
 
+(defn pnr [x] (println x) x)
+
 (defn wrap-pure-imap-verb [func]
   (fn [session r-chan w-chan [_ tag _ args]]
     (let [{response :response new-session :session} (func args session)]
@@ -58,6 +60,25 @@
                    (string/join ", " ok-states))
        :session session}
       (func args session))))
+
+(defn box->tag
+  "Given a mailbox name per IMAP's idea of mailboxes, return an internal tag
+  name."
+  [s]
+  (let [norm (str "MB-" (.toUpperCase s))]
+    (cond
+      (= norm "MB-INBOX") "\\Inbox"
+      (= norm "MB-*") "*"
+      (= norm "MB-%") "*"
+      :else norm)))
+
+(defn tag->box
+  "Given an internal tag name return an IMAP mailbox name that would normalize
+  to it."
+  [s]
+  (let [[_ _ tag-style mb-style wierd] (re-matches #"(\\(.+)|MB-(.+)|(.+))" s)
+        norm (.toUpperCase (or tag-style mb-style wierd))]
+    norm))
 
 (defn noop [args session]
   (if args
@@ -195,21 +216,44 @@
                                          :state "selected"})})))))))
 
 (require-state #{"authenticated" "selected"}
-  (defn examine 
-    ([args session]
-     (examine args session settings/db))
-    ([args session db]
-     (select args (assoc session :read-only true) db))))
+(defn examine 
+  ([args session]
+   (examine args session settings/db))
+  ([args session db]
+   (select args (assoc session :read-only true) db))))
 
 
 (require-state #{"authenticated" "selected"}
-  (defn create
-    ([args session]
-     (create args session settings/db))
-    ([args session db]
-     {:response (str "NO Users can not create mailboxes through the IMAP "
-                     "interface.")
-      :session session})))
+(defn create
+  ([args session]
+   (create args session settings/db))
+  ([args session db]
+   (let [[tag & xs]  (->> args 
+                          addresses/quote-atom-split 
+                          (map common/strip-quotes))]
+     (cond 
+       (not (empty? xs))
+         {:session session
+          :response "BAD Hark knave! Thou protest too keenly! (too many args)"}
+       (empty? tag)
+         {:session session
+          :response "BAD Hark knave! Thou protest too weakly! (too few args)"}
+       :else
+         (if (first (j/query db ["SELECT * FROM platonic_tags
+                                 WHERE name=? AND owner_id=?"
+                                 (box->tag tag)
+                                 (-> session :user :id)]))
+           {:session session
+            :response (str "NO Hark knave! Thou shalt not usurp that title! "
+                           "(mailbox name already exists)")}
+           (do
+             (->> {:name (box->tag tag) :owner_id (-> session :user :id)}
+                  (j/insert! db :platonic_tags)
+                  (first)
+                  ((keyword "last_insert_rowid()")))
+             {:session session
+              :response "OK Hail! Thy quest hath succeeded! (mailbox created)"}
+             )))))))
 
 (require-state #{"authenticated" "selected"}
   (defn delete
@@ -355,25 +399,6 @@
     WHERE 
       owner_id = ? AND 
       (name = ? OR 1);") 
-
-(defn box->tag
-  "Given a mailbox name per IMAP's idea of mailboxes, return an internal tag
-  name."
-  [s]
-  (let [norm (str "MB-" (.toUpperCase s))]
-    (cond
-      (= norm "MB-INBOX") "\\Inbox"
-      (= norm "MB-*") "*"
-      (= norm "MB-%") "*"
-      :else norm)))
-
-(defn tag->box
-  "Given an internal tag name return an IMAP mailbox name that would normalize
-  to it."
-  [s]
-  (let [[_ _ tag-style mb-style wierd] (re-matches #"(\\(.+)|MB-(.+)|(.+))" s)
-        norm (.toUpperCase (or tag-style mb-style wierd))]
-    norm))
 
 (require-state #{"authenticated" "selected"}
 (defn list-verb

@@ -113,13 +113,27 @@
     (is (some (fn [x] (re-matches #"\d+ RECENT" x)) 
               (:response case-one)))))
 
+
+;(j/db-transaction*)
 (deftest test-imap-create
-  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
-        case-one (imap/create "" {} test-db)
-        case-two (imap/create "" {:state "authenticated" :user user} test-db)]
-    (is (= (:session case-one) {}))
-    (is (re-matches #"^BAD.*" (:response case-one)))
-    (is (re-matches #"^NO.*" (:response case-two)))))
+  (j/with-db-transaction [tdb test-db]
+    (let [user (common/get-user-record "lanny@neveraga.in" tdb)
+          case-one (imap/create "" {} tdb)
+          case-two (imap/create "" {:state "authenticated" :user user} tdb)
+          case-three (imap/create "Breath This Air" 
+                                  {:state "authenticated" :user user} tdb)
+          case-four (imap/create "\"Trash\"" 
+                                 {:state "authenticated" :user user} tdb)
+          case-five (imap/create "Trash" 
+                                 {:state "authenticated" :user user} tdb)]
+      (is (= (:session case-one) {}))
+      (is (re-matches #"^BAD.*" (:response case-one)))
+      (is (re-matches #"^BAD.*" (:response case-two)))
+      (is (re-matches #"^BAD.*" (:response case-three)))
+      (is (re-matches #"^OK.*" (:response case-four)))
+      (is (re-matches #"^NO.*" (:response case-five)))
+
+      (j/db-set-rollback-only! tdb))))
 
 (deftest test-imap-delete
   (let [user (common/get-user-record "lanny@neveraga.in" test-db)
