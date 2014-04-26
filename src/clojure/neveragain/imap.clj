@@ -415,6 +415,24 @@
                                   cur-num)}
                (recur remaining (conj response resp)))))))))))
 
+(defn uid-fetch [] nil)
+
+(def uid-handler-map
+  {"FETCH" uid-fetch})
+
+(defn uid-mux
+  "Technically an IMAP verb, only exists to delegate to the UID forms of other
+  verbs."
+  ([args session]
+   (uid-mux args session settings/db))
+  ([args session db]
+   (let [[_ d-verb d-args] (re-matches #"(?i)(FETCH) +(.+)$" args)]
+     (if-not d-verb
+       {:session session
+        :response "BAD Nay knave! Thine query possesseth not the UID aspect!"}
+       ((uid-handler-map d-verb) d-verb d-args db)))))
+
+
 (def select-mailbox-sql 
   "SELECT * FROM platonic_tags WHERE owner_id = ? AND name = ?;") 
 
@@ -472,7 +490,8 @@
                   "DELETE" (wrap-pure-imap-verb delete)
                   "SUBSCRIBE" (wrap-pure-imap-verb subscribe)
                   "FETCH" (wrap-pure-imap-verb fetch)
-                  "LOGOUT" (wrap-pure-imap-verb logout)})
+                  "LOGOUT" (wrap-pure-imap-verb logout)
+                  "UID" (wrap-pure-imap-verb uid-mux)})
 
 (defn connection-handler
   [r-chan w-chan]
