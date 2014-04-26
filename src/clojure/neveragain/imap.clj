@@ -7,6 +7,7 @@
     (clojure.java [jdbc :as j])
     (neveragain [common :as common]
                 [settings :as settings]
+                [pdaparse :as pp]
                 [addresses :as addresses]
                 [async-serv :as as]))
   (:import
@@ -381,6 +382,80 @@
     recipient_id = ? AND
     seq_num = ?
   LIMIT 1;")
+
+(def fetch-range-grammar
+  {:start-symbol :S
+   :prod-rules {
+     :S #{:single :set :range}
+     :single #{:number}
+     :set #{'(\( :set-member :set-rest \))}
+     :set-rest #{'(\, :set-member :set-rest) :ε}
+     :set-member #{:number}
+     :range #{'(\( :left-bound \: :right-bound \))}
+     :left-bound #{:number}
+     :right-bound #{:number}
+     :number (conj (set (map (fn [x] (list (char x) :number)) 
+                             (range 48 58)))
+                   :ε)}})
+
+(def fetch-range-pda (pp/cfg-to-ndpda fetch-range-grammar))
+
+(defn parseInt [x] (Integer/parseInt x))
+
+(defn raw-fetch-numbers
+  "Takes a sequence/uid number/set/range as a string and returns all the 
+  numbers identified by it as a collection. For testing only"
+  [s]
+  (let [[accepted captured] (pp/parse fetch-range-pda s
+                                      #{:single :set :range :set-member
+                                        :left-bound :right-bound})
+        parts (pp/extract s captured)]
+    (cond
+      (not accepted) nil
+      (:single parts) [(-> parts :single first parseInt)]
+      (:set parts) (map parseInt (:set-member parts))
+      (:range parts) 
+        (inclusive-range (-> parts :left-bound first parseInt)
+                         (-> parts :right-bound first parseInt))
+      :else (throw (Throwable. "Parse accepted string but captured nothing.")))))
+
+(defn gen-range-where-clause 
+  "Given a string representing a fetch style number set (either UIDs or
+  sequence numbers) return a collection (sql, vals) where sql is boolen SQL
+  part of a WHERE clause and vals is an ordered collection of values to pass
+  to the sanitizer that will be used in that clause. Vals may contain one or
+  more value and should be passed to the sanatizer concatinated to any other
+  paramaters. `col-name` specifies the name of the column that the returned
+  sql will limit on.
+  
+  e.x. (user)=>(gen-range-where-clause \"(2:10)\" \"seq_num\")
+  (\"seq_num >= ? AND seq_num <= 10\" [2 10])"
+  [s col-name])
+
+(defn |_|n54f3
+  "Like the thing above but only returns sql and probably unsafe."
+  [s col-name]
+  (let [[accepted captured] (pp/parse fetch-range-pda s
+                                      #{:single :set :range :set-member
+                                        :left-bound :right-bound})
+        parts (pp/extract s captured)]
+    ; TODO: Have a sane person look at this and tell how bad of an idea it is.
+    (cond
+      (not accepted) nil
+      (:single parts) 
+        (format "%s = %d" col-name (-> parts :single first parseInt))
+      (:set parts) 
+        (format "%s IN (%s)" col-name 
+          (string/join ", " 
+                       (map (fn [x] (format "%d" (parseInt x))) 
+                            (:set-member parts))))
+      (:range parts) 
+        (format "%s >= %d AND %s <= %d"
+                col-name (-> parts :left-bound first parseInt)
+                col-name (-> parts :right-bound first parseInt))
+      :else 
+        (throw (Throwable. "Parse accepted string but captured nothing.")))))
+
 
 (require-state #{"selected"}
 (defn fetch
