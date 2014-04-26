@@ -65,7 +65,7 @@
   "Given a mailbox name per IMAP's idea of mailboxes, return an internal tag
   name."
   [s]
-  (let [norm (str "MB-" (.toUpperCase s))]
+  (let [norm (str "MB-" s)]
     (cond
       (= norm "MB-INBOX") "\\Inbox"
       (= norm "MB-*") "*"
@@ -77,8 +77,8 @@
   to it."
   [s]
   (let [[_ _ tag-style mb-style wierd] (re-matches #"(\\(.+)|MB-(.+)|(.+))" s)
-        norm (.toUpperCase (or tag-style mb-style wierd))]
-    norm))
+        norm (or tag-style mb-style wierd)]
+    (if (= tag-style "Inbox") "INBOX" norm)))
 
 (defn noop [args session]
   (if args
@@ -448,8 +448,8 @@
                      select-all-mailboxes-sql 
                      select-mailbox-sql)
                records (j/query db [sql (-> session :user :id) tag-name])
-               lines (for [box records] (str "LIST () \"#users\" \""
-                                             (tag->box (:name box)) \"))]
+               lines (for [box records] (format "LIST () NIL %s"
+                                                (tag->box (:name box))))]
            {:session session
             :response (conj (into [] lines) 
                             "OK LIST completed, my liege.")}))))))

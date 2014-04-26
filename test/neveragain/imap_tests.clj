@@ -190,7 +190,7 @@
   (let [session {:state "authenticated"
                  :user (common/get-user-record "lanny@neveraga.in" test-db)}
         cases [["\"\" \"INBOX\"" #{"INBOX"}]
-               ["\"\" \"*\"" #{"INBOX" "RECENT"}]
+               ["\"\" \"*\"" #{"INBOX" "Recent"}]
                ["\"lol\" \"INBOX\"" #{}]
                ["\"\" \"squid\"" #{}]]]
     (loop [[[args return] & remaining] cases]
@@ -199,7 +199,7 @@
         (doall
           (for [line (butlast response)]
             (is (->> line 
-                     (re-matches #"^LIST \(\) \"#users\" \"(.+)\"$")
+                     (re-matches #"^LIST \(\) NIL (.+)$")
                      (second)
                      (contains? return))))))
       (if (not (empty? remaining)) (recur remaining)))))
