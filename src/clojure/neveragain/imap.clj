@@ -229,12 +229,13 @@
          ; And give them our response
          (let [response [(format "%d EXISTS" exists-count)
                          (format "%d RECENT" recent-count)
-                         (format "FLAGS (%s)" flags-list)
-                         "OK SELECT command complete"]
-               unseen-line (format "OK [UNSEEN %d]" unseen-seq-num)]
+                         (format "FLAGS (%s)" flags-list)]
+               unseen-line (format "OK [UNSEEN %d]" unseen-seq-num)
+               complete-line "OK SELECT command complete"]
+
            {:response (if unseen-seq-num
-                        (conj response unseen-line)
-                        response)
+                        (conj response unseen-line complete-line)
+                        (conj response complete-line))
             :session (merge session {:selected-box selected-box
                                      :state "selected"})})))))))
 
