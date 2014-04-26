@@ -172,7 +172,7 @@
       ; if it's not just return now, the rest won't mean anything anyway.
       {:valid false} 
       (let [{:keys [local-part box-name sub-box domain]} 
-              (pp/extract l-addr parsts true)
+              (pp/extract l-addr parsts :singles true)
             norm-box-name (string/replace box-name #"\." "")]
         {:valid true
          :warning (or (not (common-atom? local-part))

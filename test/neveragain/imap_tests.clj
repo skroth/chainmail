@@ -26,14 +26,17 @@
 
 (deftest test-imap-parse-fetch-args
   (loop [[[s [nums fields]] & remaining] 
-         [["5 FLAGS" [[5] #{:FLAGS}]] 
-          ["42 (FLAGS ENVELOPE)" [[42] #{:FLAGS :ENVELOPE}]]
-          ["42 ALL" [[42] #{:FLAGS :INTERNALDATE :RFC822.SIZE :ENVELOPE}]]
-          ["(1,2,3) (FLAGS)" [[1 2 3] #{:FLAGS}]]
-          ["(9:11) FAST" [[9 10 11] #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
-          ["(11:9) FAST" [[] #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
+         [["5 FLAGS" ["seq_num = 5" #{:FLAGS}]] 
+          ["42 (FLAGS ENVELOPE)" ["seq_num = 42" #{:FLAGS :ENVELOPE}]]
+          ["42 ALL" ["seq_num = 42" #{:FLAGS :INTERNALDATE 
+                                      :RFC822.SIZE :ENVELOPE}]]
+          ["(1,2,3) (FLAGS)" ["seq_num IN (3, 2, 1)" #{:FLAGS}]]
+          ["(9:11) FAST" ["seq_num >= 9 AND seq_num <= 11" 
+                          #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
+          ["(11:9) FAST" ["seq_num >= 11 AND seq_num <= 9"
+                          #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
           ["2a FAST" [nil #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
-          ["(1,2) SLOW" [[1 2] nil]]]]
+          ["(1,2) SLOW" ["seq_num IN (2, 1)" nil]]]]
     (let [[r-nums r-fields] (imap/parse-fetch-args s)]
       (is (= r-nums nums))
       (is (= r-fields fields))
@@ -166,17 +169,17 @@
   (let [user (common/get-user-record "lanny@neveraga.in" test-db)
         case-one (imap/fetch "1 BODY" 
                              {:state "selected" 
-                              :selected-box (:id user)
+                              :selected-box "\\Inbox"
                               :user user
                               :subscriptions #{}}
                              test-db)
         case-two (imap/fetch "999 BODY"
                              {:state "selected" 
-                              :selected-box (:id user)
+                              :selected-box "\\Inbox"
                               :user user
                               :subscriptions #{}}
                              test-db)]
-    (is (re-matches #"BAD.*" (:response case-two)))
+    (is (= 1 (count (:response case-two))))
     (is (re-matches #"OK.*" (-> case-one :response last)))
     (is (= (count (:response case-one)) 2))
     (let [[_ size message] (re-matches #"(?s)^\d+ FETCH \(BODY \{(\d+)\}(.+)\)$"

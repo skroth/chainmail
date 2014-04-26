@@ -169,6 +169,7 @@
   symbols which will be captured and returned. Returned value is a two item
   list of (accepted, captured) where captured is a map from non-terminal
   symbols to their value within the string."
+  {:arglists '([pda string captures])}
   ([pda s captures]
    (parse pda (seq s) (:start-state pda) '() captures []))
 
@@ -224,18 +225,17 @@
   second value in the output of `parse`. If optional argument `singles` is 
   true will assume only one instance of each capture will appear and will
   return a map of string rather than lists."
-  ([s parts]
-   (extract s parts false))
-  ([s parts singles]
-   (let [len (count s)]
-     (loop [[[part start end] & remaining] parts
-            r {}]
-       (if-not part
-         r
-         (recur remaining
-                (assoc r part
-                       (if-not singles
-                         (conj (get r part)
-                               (subs s (- len start) (- len end)))
-                         (subs s (- len start) (- len end))))))))))
+  [s parts &{:keys [singles]
+              :or  {singles false}}]
+  (let [len (count s)]
+    (loop [[[part start end] & remaining] parts
+           r {}]
+      (if-not part
+        r
+        (recur remaining
+               (assoc r part
+                      (if-not singles
+                        (conj (get r part)
+                              (subs s (- len start) (- len end)))
+                        (subs s (- len start) (- len end)))))))))
 

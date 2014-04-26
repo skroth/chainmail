@@ -334,55 +334,6 @@
   ([start stop step]
    (range start (inc stop) step)))
 
-(defn parse-fetch-args [args]
-  "Takes an arg string for the IMAP FETCH command and parses it into a vector
-  of sequence numbers and a set of keywords indicating valid fields specified
-  by the arg string. Will expand `:` sequence syntax, so 2:4 will expand to 
-  [2 3 4]. Will expand rfc3501 defined macros so ALL will expand to [:FLAGS
-  :INTERNALDATE :RFC822.SIZE]."
-  (let [[seq-nums item-names & other] (addresses/quote-atom-split args 
-                                                                  \space 
-                                                                  \( \))]
-    (if other 
-      nil ; Args list is too long, something is wrong
-      [(cond ; Part one, the message seq nums
-         (re-matches #"\d+" seq-nums)
-           [(Integer/parseInt seq-nums)]
-         (re-matches #"\((\d+)(\s*,\d+)*\)" seq-nums)
-           (-<> seq-nums
-                (.substring 1 (dec (count seq-nums)))
-                (string/split #"[\s,]+")
-                (map (fn [x] (Integer/parseInt x)) <>)
-                (vec))
-         (re-matches #"\((\d+):(\d+)\)" seq-nums)
-           (-<> seq-nums
-                (.substring 1 (dec (count seq-nums)))
-                (string/split #":")
-                (map (fn [x] (Integer/parseInt x)) <>)
-                (apply inclusive-range <>)
-                (vec))
-         :else nil)
-       (cond ; Part two, the message fields
-         (contains? fetch-macros item-names)
-           (get fetch-macros item-names)
-         (contains? message-fields (keyword item-names))
-           #{(keyword item-names)}
-         (re-matches #"\(([a-zA-Z0-9.]+)([\s,][a-zA-Z0-9.]+)*\)" item-names)
-           (-<> item-names
-                (.substring 1 (dec (count item-names)))
-                (string/split #"[\s,]+")
-                (map keyword <>)
-                (set)
-                (set-lib/intersection message-fields))
-         :else nil)])))
-
-(def message-by-recipient-seq 
-  "SELECT data, aes_key, iv, recv_date FROM messages 
-  WHERE 
-    recipient_id = ? AND
-    seq_num = ?
-  LIMIT 1;")
-
 (def fetch-range-grammar
   {:start-symbol :S
    :prod-rules {
@@ -432,7 +383,7 @@
   (\"seq_num >= ? AND seq_num <= 10\" [2 10])"
   [s col-name])
 
-(defn |_|n54f3
+(defn |_|n54ƒ3
   "Like the thing above but only returns sql and probably unsafe."
   [s col-name]
   (let [[accepted captured] (pp/parse fetch-range-pda s
@@ -457,39 +408,70 @@
         (throw (Throwable. "Parse accepted string but captured nothing.")))))
 
 
+
+(defn parse-fetch-args 
+  "Takes an arg string for the IMAP FETCH command and parses it into a vector
+  of sequence numbers and a set of keywords indicating valid fields specified
+  by the arg string. Will expand `:` sequence syntax, so 2:4 will expand to 
+  [2 3 4]. Will expand rfc3501 defined macros so ALL will expand to [:FLAGS
+  :INTERNALDATE :RFC822.SIZE]."
+  [args &{:keys [UID]
+          :or   {UID false}}]
+  (let [[seq-nums item-names & other] (addresses/quote-atom-split args 
+                                                                  \space 
+                                                                  \( \))]
+    (if other 
+      nil ; Args list is too long, something is wrong
+      [(|_|n54ƒ3 seq-nums (if UID "id" "seq_num"))
+       (cond ; Part two, the message fields
+         (contains? fetch-macros item-names)
+           (get fetch-macros item-names)
+         (contains? message-fields (keyword item-names))
+           #{(keyword item-names)}
+         (re-matches #"\(([a-zA-Z0-9.]+)([\s,][a-zA-Z0-9.]+)*\)" item-names)
+           (-<> item-names
+                (.substring 1 (dec (count item-names)))
+                (string/split #"[\s,]+")
+                (map keyword <>)
+                (set)
+                (set-lib/intersection message-fields))
+         :else nil)])))
+
+(def fetch-query
+  "SELECT * FROM messages 
+  JOIN tags ON
+    tags.message_id = messages.id
+  WHERE 
+    recipient_id = ? AND 
+    tags.name = ? AND 
+    %s;")
+
+(defn format-record
+  "Takes a database record and formats it as one 'line' to be sent over imap"
+  [record session UID]
+  (let [wrapped (common/daemon-wrap record 
+                                    (addresses/c-addr (:user session)))
+        wrapped-len (alength (.getBytes wrapped "UTF-8"))
+        cur-num ((if UID :id :seq_num) record)]
+    (format "%d FETCH (BODY {%d}%s)" cur-num wrapped-len wrapped)))
+
 (require-state #{"selected"}
 (defn fetch
   ([args session]
    (fetch args session settings/db))
-  ([args session db]
-   (let [[seq-nums fields] (parse-fetch-args args)
+  ([args session db &{:keys [UID]
+                      :or   {UID false}}]
+   (let [[where-sql fields] (parse-fetch-args args)
          box-id (:selected-box session)]
-     (if-not (and seq-nums fields)
+     (if-not (and where-sql fields)
        {:response "BAD Malformed FETCH arguments."
         :session session}
-       (loop [[cur-num & remaining] seq-nums
-              response []]
-         (if-not cur-num
-           {:session session
-            :response (conj response "OK FETCH completed")}
-
-           ; Ignore fields for the moment, it's not worth diceing up wrapped
-           ; messages on the server. The client can worry about it.
-           (let [record (->> [message-by-recipient-seq box-id cur-num]
-                             (j/query db)
-                             (first))
-                 wrapped (common/daemon-wrap record 
-                                             (addresses/c-addr (:user session)))
-                 wrapped-len (alength (.getBytes wrapped "UTF-8"))
-                 resp (format "%d FETCH (BODY {%d}%s)" 
-                              cur-num wrapped-len wrapped)]
-             (if-not record
-               {:session session
-                :response (format (str "BAD No message in this inbox with "
-                                       "sequence number %d.")
-                                  cur-num)}
-               (recur remaining (conj response resp)))))))))))
-
+       (let [sql (format fetch-query where-sql)
+             records (j/query db [sql (-> session :user :id) box-id])]
+         {:session session
+          :response (conj (into [] (map (fn [x] (format-record x session UID)) 
+                                        records))
+                          "OK FETCH complete. Hail milord!")}))))))
 (defn uid-fetch [] nil)
 
 (def uid-handler-map
