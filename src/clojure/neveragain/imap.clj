@@ -237,7 +237,7 @@
            {:response (if unseen-seq-num
                         (conj response unseen-line complete-line)
                         (conj response complete-line))
-            :session (merge session {:selected-box selected-box
+            :session (merge session {:selected-box (:name selected-box)
                                      :state "selected"})})))))))
 
 (require-state #{"authenticated" "selected"}
@@ -467,12 +467,13 @@
        {:response "BAD Malformed FETCH arguments."
         :session session}
        (let [sql (format fetch-query where-sql)
-             records (j/query db [sql (-> session :user :id) box-id])]
+             records (j/query db (pnr [sql (-> session :user :id) box-id]))]
          {:session session
           :response (conj (into [] (map (fn [x] (format-record x session UID)) 
                                         records))
                           "OK FETCH complete. Hail milord!")}))))))
-(defn uid-fetch [] nil)
+(defn uid-fetch [& args]
+  (apply fetch (concat args [:UID true])))
 
 (def uid-handler-map
   {"FETCH" uid-fetch})
@@ -556,10 +557,21 @@
        "* OK Hail! ChainMail IMAP server at thine service my liege!\r\n")
   (go-loop [read-val (<! r-chan)
             session {}]
-    (let [[line tag verb args] (re-matches #"(.+?)\s(\S+)\s?(.+)?" read-val)
-          handler (get handler-map (.toUpperCase verb) null-verb)
-          new-session (handler session r-chan w-chan [line tag verb args])]
-      (recur (<! r-chan) new-session))))
+    (try
+      (let [[line tag verb args] (re-matches #"(.+?)\s(\S+)\s?(.+)?" read-val)]
+        (if-not line
+          (do
+            (>!! w-chan "* BAD Hark knave, thine command parses not!\r\n")
+            (recur (<! r-chan) session))
+          (let [handler (get handler-map (.toUpperCase verb) null-verb)
+                new-session (handler session r-chan w-chan [line tag verb args])]
+            (recur (<! r-chan) new-session))))
+      (catch Exception e
+        (do
+          (>!! w-chan
+               "* BAD Hark! Unspecified failure, woe upon thee knave!\r\n")
+          (println "Wowah, exception:\n" e))))))
+
 
 (defn serve-forever
   [port]
