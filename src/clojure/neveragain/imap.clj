@@ -342,12 +342,12 @@
      :set #{'(\( :set-member :set-rest \))}
      :set-rest #{'(\, :set-member :set-rest) :ε}
      :set-member #{:number}
-     :range #{'(\( :left-bound \: :right-bound \))}
-     :left-bound #{:number}
-     :right-bound #{:number}
-     :number (conj (set (map (fn [x] (list (char x) :number)) 
-                             (range 48 58)))
-                   :ε)}})
+     :range #{'(:left-bound \: :right-bound)}
+     :left-bound #{:bound}
+     :right-bound #{:bound}
+     :diget (set (map char (range 48 58)))
+     :number #{:diget '(:diget :number)}
+     :bound #{\* :number}}})
 
 (def fetch-range-pda (pp/cfg-to-ndpda fetch-range-grammar))
 
@@ -390,24 +390,28 @@
                                       #{:single :set :range :set-member
                                         :left-bound :right-bound})
         parts (pp/extract s captured)]
-    ; TODO: Have a sane person look at this and tell how bad of an idea it is.
+    ; TODO: Have a sane person look at this and tell me how bad it is.
     (cond
       (not accepted) nil
-      (:single parts) 
+      (:single parts)
         (format "%s = %d" col-name (-> parts :single first parseInt))
-      (:set parts) 
+      (:set parts)
         (format "%s IN (%s)" col-name 
           (string/join ", " 
                        (map (fn [x] (format "%d" (parseInt x))) 
                             (:set-member parts))))
-      (:range parts) 
-        (format "%s >= %d AND %s <= %d"
-                col-name (-> parts :left-bound first parseInt)
-                col-name (-> parts :right-bound first parseInt))
-      :else 
+      (:range parts)
+        ; Watch out, it's about to get tricky in here.
+        (let [lb (-> parts :left-bound first)
+              rb (-> parts :right-bound first)
+              ss (filter identity
+                         (map (fn [x y] (if (= x "*") nil 
+                                          [(str col-name y) (parseInt x)]))
+                              [lb rb] [" >= %d" " <= %d"]))]
+          (apply format (string/join " AND " (map first ss))
+                        (map last ss)))
+      :else
         (throw (Throwable. "Parse accepted string but captured nothing.")))))
-
-
 
 (defn parse-fetch-args 
   "Takes an arg string for the IMAP FETCH command and parses it into a vector
@@ -467,7 +471,7 @@
        {:response "BAD Malformed FETCH arguments."
         :session session}
        (let [sql (format fetch-query where-sql)
-             records (j/query db (pnr [sql (-> session :user :id) box-id]))]
+             records (j/query db [sql (-> session :user :id) box-id])]
          {:session session
           :response (conj (into [] (map (fn [x] (format-record x session UID)) 
                                         records))

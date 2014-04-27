@@ -31,12 +31,14 @@
           ["42 ALL" ["seq_num = 42" #{:FLAGS :INTERNALDATE 
                                       :RFC822.SIZE :ENVELOPE}]]
           ["(1,2,3) (FLAGS)" ["seq_num IN (3, 2, 1)" #{:FLAGS}]]
-          ["(9:11) FAST" ["seq_num >= 9 AND seq_num <= 11" 
+          ["9:11 FAST" ["seq_num >= 9 AND seq_num <= 11" 
                           #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
-          ["(11:9) FAST" ["seq_num >= 11 AND seq_num <= 9"
+          ["11:9 FAST" ["seq_num >= 11 AND seq_num <= 9"
                           #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
           ["2a FAST" [nil #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
-          ["(1,2) SLOW" ["seq_num IN (2, 1)" nil]]]]
+          ["(1,2) SLOW" ["seq_num IN (2, 1)" nil]]
+          ["1:2* FLAGS" [nil #{:FLAGS}]]
+          ["1:* FLAGS" ["seq_num >= 1" #{:FLAGS}]]]]
     (let [[r-nums r-fields] (imap/parse-fetch-args s)]
       (is (= r-nums nums))
       (is (= r-fields fields))
