@@ -476,8 +476,10 @@
           :response (conj (into [] (map (fn [x] (format-record x session UID)) 
                                         records))
                           "OK FETCH complete. Hail milord!")}))))))
-(defn uid-fetch [& args]
-  (apply fetch (concat args [:UID true])))
+(defn uid-fetch 
+  ;No variadic form because kwargs and multiple arities don't seem to get along
+  [args session db]
+  (fetch args session db :UID true))
 
 (def uid-handler-map
   {"FETCH" uid-fetch})
@@ -492,8 +494,7 @@
      (if-not d-verb
        {:session session
         :response "BAD Nay knave! Thine query possesseth not the UID aspect!"}
-       ((uid-handler-map d-verb) d-verb d-args db)))))
-
+       ((uid-handler-map (.toUpperCase d-verb)) d-args session db)))))
 
 (def select-mailbox-sql 
   "SELECT * FROM platonic_tags WHERE owner_id = ? AND name = ?;") 
@@ -574,7 +575,8 @@
         (do
           (>!! w-chan
                "* BAD Hark! Unspecified failure, woe upon thee knave!\r\n")
-          (println "Wowah, exception:\n" e))))))
+          (println "Wowah, exception:\n" e)
+          (.printStackTrace e))))))
 
 
 (defn serve-forever

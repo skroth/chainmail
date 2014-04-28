@@ -44,7 +44,6 @@
       (is (= r-fields fields))
       (if (not (empty? remaining)) (recur remaining)))))
 
-
 (deftest test-imap-noop
   (let [session {:dummy-key false}
         res-one (imap/noop nil session)
@@ -180,16 +179,34 @@
                               :selected-box "\\Inbox"
                               :user user
                               :subscriptions #{}}
-                             test-db)]
+                             test-db)
+        case-three (imap/uid-fetch "1:* (FLAGS)"
+                                   {:state "selected"
+                                    :selected-box "\\Inbox"
+                                    :user user
+                                    :subscriptions #{}}
+                                   test-db)]
     (is (= 1 (count (:response case-two))))
     (is (re-matches #"OK.*" (-> case-one :response last)))
-    (is (= (count (:response case-one)) 2))
+    (is (= 2 (count (:response case-one))))
+    (is (< 1 (count (:response case-three))))
     (let [[_ size message] (re-matches #"(?s)^\d+ FETCH \(BODY \{(\d+)\}(.+)\)$"
                                        (-> case-one :response first))]
       (is (= (Integer/parseInt size) 
              (alength (.getBytes message "UTF-8")))))))
-    
-(re-matches #"^LIST \(\) \"#users\" \"(.+)\"$" "LIST () \"#users\" \"RECENT\"")
+
+(deftest test-uid-fetch
+  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+        ; Verbs are supposed to be case insensitive, make sure we end up
+        ; getting the correct handler.
+        case-one (imap/uid-mux "FeTCH 1:* (FLAGS)"
+                               {:state "selected"
+                                :selected-box "\\Inbox"
+                                :user user
+                                :subscriptions #{}}
+                               test-db)]
+
+    (is (re-matches #"OK.*" (-> case-one :response last)))))
 
 (deftest test-imap-list
   (let [session {:state "authenticated"
