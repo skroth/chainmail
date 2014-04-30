@@ -5,6 +5,7 @@
       [common :refer :all]
       [settings :as settings]
       rfc auth tls x-cm-login)
+    (swiss [arrows :refer :all])
     (less.awful [ssl :as las]))
 
   (:import
@@ -83,14 +84,19 @@
     (println (str "Serving on port " (.getLocalPort serv-socket)))
     (while (= 1 1)
       (let [client-socket (.accept serv-socket)
-          conn (make-conn client-socket)]
+            conn (make-conn client-socket)]
         (.execute thread-pool (fn [] (handle-conn conn)))))))
 
 (defn -main [& args]
   (println settings/banner)
-  (def tls-server (future (serve-forever (las/server-socket (las/ssl-context
-                           (:key settings/keyfiles)
-                           (:cert settings/keyfiles)
-                           (:ca settings/keyfiles)) "localhost" settings/tls-smtp-port) settings/thread-count)))
-  (serve-forever (ServerSocket. settings/smtp-port) settings/thread-count)
-  (deref tls-server))
+  (let [reg-server (-> (ServerSocket. settings/smtp-port)
+                       (serve-forever settings/thread-count)
+                       (future))
+        ssl-server (-<> [(:key settings/keyfiles)
+                         (:cert settings/keyfiles)
+                         (:ca settings/keyfiles)]
+                        (apply las/ssl-context <>)
+                        (las/server-socket "localhost" settings/tls-smtp-port))]
+    (.setNeedClientAuth ssl-server false)
+    (serve-forever ssl-server settings/thread-count)
+    (deref reg-server)))
