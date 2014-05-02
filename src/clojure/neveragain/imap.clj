@@ -7,10 +7,12 @@
     (clojure.java [jdbc :as j])
     (neveragain [common :as common]
                 [settings :as settings]
+                [imf :as imf]
                 [pdaparse :as pp]
                 [addresses :as addresses]
                 [async-serv :as as]))
   (:import
+    (java.util Date)
     (org.mindrot.jbcrypt BCrypt)))
 
 (defn pnr [x] (println x) x)
@@ -482,6 +484,13 @@
                     (format "FLAGS (%s)"))
              (= field :UID)
                (format "UID %d" (:id record))
+             (= field :INTERNALDATE)
+               (->> record
+                    (:recv_date)
+                    (* 1000)
+                    (Date.)
+                    (imf/fmt-date)
+                    (str "INTERNALDATE "))
              (= field :BODY)
                (str "BODY " (transmit-fmt wrapped))))
 

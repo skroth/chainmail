@@ -180,7 +180,7 @@
                               :user user
                               :subscriptions #{}}
                              test-db)
-        case-three (imap/uid-fetch "1:* (FLAGS UID)"
+        case-three (imap/uid-fetch "1:* (FLAGS UID INTERNALDATE)"
                                    {:state "selected"
                                     :selected-box "\\Inbox"
                                     :user user
@@ -190,7 +190,8 @@
     (is (re-matches #"OK.*" (-> case-one :response last)))
     (is (= 2 (count (:response case-one))))
     (is (< 1 (count (:response case-three))))
-    (is (re-matches #"^1 FETCH \(FLAGS \((\\Inbox)\) UID \d+\).*"
+    ; Forive the ID regex, but we want this to work regardless of TZ.
+    (is (re-matches #"^1 FETCH \(FLAGS \((\\Recent \\Inbox)\) UID \d+ INTERNALDATE (Wed|Thu), (31|01) (Dec|Jan) 19[67][90] \d{2}:\d{2}:\d{2} [+-]\d{4}\).*"
                     (-> case-three :response first)))
     (let [[_ size message] (re-matches #"(?s)^\d+ FETCH \(BODY \{(\d+)\}(.+)\)$"
                                        (-> case-one :response first))]

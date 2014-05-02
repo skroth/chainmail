@@ -1,7 +1,8 @@
 (ns neveragain.imf
   (:require
     (clojure [string :as string])
-    (neveragain [pdaparse :as pp])))
+    (neveragain [common :as common]
+                [pdaparse :as pp])))
 
 (def imf-grammar
   {:start-symbol :S
@@ -16,12 +17,17 @@
                                               (range 59 126))))
                 :body #{:text+}
                 :text+ #{'(:text :text+) :text}
-                :text (set (map (char (concat (range 1 10)
+                :text (set (map char (concat (range 1 10)
                                               (range 11 13)
-                                              (range 14 128)))))
+                                              (range 14 128))))
                 }})
 
 (def imf-pda (pp/cfg-to-ndpda imf-grammar))
+
+(defn fmt-date
+  "Returns a RFC2822 compliant date string."
+  [d]
+  (common/strftime "%a, %d %b %Y %H:%M:%S %z" d))
 
 (defn unfold
   "'Unfolds' a rfc 2822 message, splitting a string by semantic line by 

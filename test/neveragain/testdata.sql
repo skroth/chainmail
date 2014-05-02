@@ -7,4 +7,4 @@ INSERT INTO users ("realname", "address", "box_name", "hostname", "hashword", "e
 --   VALUES ("lan.rogers.book@gmail.com", 1);
 
 INSERT INTO messages (data, recv_date, recipient_id, aes_key, pub_key, iv)
-  VALUES ("", 43, 1, "lol", "no key", "here");
+  VALUES ("", 0, 1, "lol", "no key", "here");

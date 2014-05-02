@@ -34,8 +34,9 @@
   (.println out-writer (str message "\r"))
   (.flush out-writer))
 
-(defn strftime [fmt t]
-  ; Convert strftime to String.format format (e.g. %m -> %1$tm)
+(defn strftime 
+  "Formats a string per the C strftime function."
+  [fmt t]
   (let [fmt (.replaceAll fmt "%([a-zA-Z])" "%1\\$t$1")]
     (format fmt t)))
 
