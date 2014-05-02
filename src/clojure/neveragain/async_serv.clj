@@ -4,9 +4,8 @@
     (neveragain [common :as common]))
   (:import
     (neveragain AsyncSocket)
-    (java.util Scanner)
     (java.net InetSocketAddress)
-    (java.nio ByteBuffer)
+    (java.io IOException)
     (java.nio.channels ServerSocketChannel)))
 
 (defn read-write!
@@ -14,6 +13,7 @@
   the result to its read channel. Vice versa with it's write channel/writer.
   Returns nil if socket has been terminated, true otherwise."
   [[socket r-chan w-chan]]
+  (try
     (let [in-line (.readLine socket)
           [out-line source] (alts!! [w-chan] :default :noop)]
       (if in-line
@@ -21,8 +21,12 @@
         (>!! r-chan in-line)))
       (if (not (= out-line :noop))
         (do (println "S: " out-line)
-        (.write socket out-line))))
-    [socket r-chan w-chan])
+        (.write socket out-line)))
+      [socket r-chan w-chan])
+    (catch IOException e
+      (do
+        (println "Client disconnected.")
+        nil))))
 
 (defn manage-sockets
   "Accepts a channel `new-conns` which will be used to accept new sockets to

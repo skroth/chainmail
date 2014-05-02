@@ -190,7 +190,7 @@
                          tags2.name LIKE '\\%';")
 
 (require-state #{"authenticated" "selected"}
-(defn select 
+(defn select
   ([args session]
    (select args session settings/db))
   ([args session db]
@@ -427,7 +427,7 @@
     (if other 
       nil ; Args list is too long, something is wrong
       [(|_|n54ƒ3 seq-nums (if UID "id" "seq_num"))
-       (cond ; Part two, the message fields
+       (cond 
          (contains? fetch-macros item-names)
            (get fetch-macros item-names)
          (contains? message-fields (keyword item-names))
@@ -450,14 +450,40 @@
     tags.name = ? AND 
     %s;")
 
+(def fetch-flags-sql
+  "SELECT name FROM tags
+  WHERE
+    name LIKE \"\\%\" AND
+    message_id = ?")
+
+(defn transmit-fmt
+  "Takes a string to be transmitted in the imap style and returns it with
+  the appropriate length prefix (assumes UTF-8 encoding)"
+  [s]
+  (format "{%d}%s" (alength (.getBytes s "UTF-8")) s))
+                
+
 (defn format-record
   "Takes a database record and formats it as one 'line' to be sent over imap"
-  [record session UID]
-  (let [wrapped (common/daemon-wrap record 
-                                    (addresses/c-addr (:user session)))
-        wrapped-len (alength (.getBytes wrapped "UTF-8"))
+  [record fields session db UID]
+  (let [wrapped (->> session
+                     (:user)
+                     (addresses/c-addr)
+                     (common/daemon-wrap record))
         cur-num ((if UID :id :seq_num) record)]
-    (format "%d FETCH (BODY {%d}%s)" cur-num wrapped-len wrapped)))
+    (->> (for [field fields]
+           (cond
+             (= field :FLAGS)
+               (->> [fetch-flags-sql (:id record)]
+                    (j/query db)
+                    (map :name)
+                    (string/join " ")
+                    (format "FLAGS (%s)"))
+             (= field :BODY)
+               (str "BODY " (transmit-fmt wrapped))))
+
+         (string/join " ")
+         (format "%d FETCH (%s)" cur-num))))
 
 (require-state #{"selected"}
 (defn fetch
@@ -473,9 +499,10 @@
        (let [sql (format fetch-query where-sql)
              records (j/query db [sql (-> session :user :id) box-id])]
          {:session session
-          :response (conj (into [] (map (fn [x] (format-record x session UID)) 
-                                        records))
-                          "OK FETCH complete. Hail milord!")}))))))
+          :response (-<> (fn [x] (format-record x fields session db UID))
+                         (map records)
+                         (into [] <>)
+                         (conj "OK FETCH complete. Hail milord!"))}))))))
 (defn uid-fetch 
   ;No variadic form because kwargs and multiple arities don't seem to get along
   [args session db]

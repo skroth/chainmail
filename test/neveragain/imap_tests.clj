@@ -190,6 +190,8 @@
     (is (re-matches #"OK.*" (-> case-one :response last)))
     (is (= 2 (count (:response case-one))))
     (is (< 1 (count (:response case-three))))
+    (is (re-matches #"^1 FETCH \(FLAGS \((\\Inbox)\)\).*"
+                    (-> case-three :response first)))
     (let [[_ size message] (re-matches #"(?s)^\d+ FETCH \(BODY \{(\d+)\}(.+)\)$"
                                        (-> case-one :response first))]
       (is (= (Integer/parseInt size) 
