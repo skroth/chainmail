@@ -221,11 +221,12 @@
              flags-list (->> [flags-in-mailbox user-id box-name]
                              (j/query db)
                              (map :name)
-                             (string/join ", "))]
+                             (string/join " "))]
          ; We just told the user about all those messages, so clear the
          ; /Recent flags
-         (if-not (:read-only session)
-           (j/execute! db [clear-recent-sql user-id box-name]))
+         ; Hmm, scratch that, not sure that's right
+         ;(if-not (:read-only session)
+         ;  (j/execute! db [clear-recent-sql user-id box-name]))
 
          ; And give them our response
          (let [response [(format "%d EXISTS" exists-count)
@@ -479,6 +480,8 @@
                     (map :name)
                     (string/join " ")
                     (format "FLAGS (%s)"))
+             (= field :UID)
+               (format "UID %d" (:id record))
              (= field :BODY)
                (str "BODY " (transmit-fmt wrapped))))
 

@@ -180,7 +180,7 @@
                               :user user
                               :subscriptions #{}}
                              test-db)
-        case-three (imap/uid-fetch "1:* (FLAGS)"
+        case-three (imap/uid-fetch "1:* (FLAGS UID)"
                                    {:state "selected"
                                     :selected-box "\\Inbox"
                                     :user user
@@ -190,7 +190,7 @@
     (is (re-matches #"OK.*" (-> case-one :response last)))
     (is (= 2 (count (:response case-one))))
     (is (< 1 (count (:response case-three))))
-    (is (re-matches #"^1 FETCH \(FLAGS \((\\Inbox)\)\).*"
+    (is (re-matches #"^1 FETCH \(FLAGS \((\\Inbox)\) UID \d+\).*"
                     (-> case-three :response first)))
     (let [[_ size message] (re-matches #"(?s)^\d+ FETCH \(BODY \{(\d+)\}(.+)\)$"
                                        (-> case-one :response first))]
