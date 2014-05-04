@@ -38,7 +38,7 @@ function InboxModel() {
 
         var message = rest.pop(),
           cipherKey = sjcl.codec.base64.toBits(message.aes_key),
-          AESKey = elGamalDecrypt(cipherKey, privKey)
+          AESKey = elGamalDecrypt(cipherKey, self.key())
 
         self.statusText(baseText + ' (AES)')
 
@@ -175,13 +175,6 @@ function composeModel(preloadData) {
 }
 
 
-X = "AICxV/iefCH6D7LCr+iQBIjzrCM2CZcT39VAqCUcJsfg"
-P = "AMP1dAI9SD68MgN50pCx8qtZUYywqflFLCc0jBbR3nZL"
-
-privKey = {
-  p: sjcl.bn.fromBits(sjcl.codec.base64.toBits(P)),
-  x: sjcl.bn.fromBits(sjcl.codec.base64.toBits(X))
-}
 
 function serializeKey(key) {
   // Returns a string

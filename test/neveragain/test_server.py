@@ -28,7 +28,7 @@ def generate_pasta_message(ow_fields):
     'subject': 'This is a test email! Random ID: %d' % random.randint(1, 10000),
     'body': 'If you install NLTK, and grab the `brown` and `names` corpera then you can get random subject lines and message bodies, making it easier to tell emails apart and less boring to read. You should probably do that.',
     'from': 'Scriptotron <scriptotron@neveraga.in>',
-    'to': 'Ryan Jenkins <lanny@neveraga.in>'
+    'to': 'Sean Roth <skroth@neveraga.in>'
   }
 
   try:
@@ -82,7 +82,7 @@ Best regards on the matter of %s %s,
 
 nice = {
     'from': 'Susan Sealy',
-    'to': 'Lan Rogers <lanny@neveraga.in>',
+    'to': 'Sean Roth <skroth@neveraga.in>',
     'subject': 'Gasket Failure at the Pattern Factory',
     'body': ('Just writing to tell you those widgets were TOP NOTCH '
         'ENTERPRISE QUALITY widgets and I look forward to purchasing '
@@ -93,18 +93,18 @@ scripts = {
   'relay_script': [
     'EHLO [localhost]\r\n',
     'AUTH LOGIN\r\n',
-    'lanny@neveraga.in'.encode('base64').strip() + '\r\n',
-    'passthesaltpls'.encode('base64').strip() + '\r\n',
-    'MAIL FROM:<lanny@neveraga.in>\r\n',
-    'RCPT TO:<lan.rogers.book@gmail.com>\r\n',
+    'skroth@neveraga.in'.encode('base64').strip() + '\r\n',
+    'skroth'.encode('base64').strip() + '\r\n',
+    'MAIL FROM:<skroth@neveraga.in>\r\n',
+    'RCPT TO:<therothinator@gmail.com>\r\n',
     'DATA\r\n',
     #generate_pasta_message({'to': 'lan.rogers.book@gmail.com', 'from': 'lanny@neveraga.in'}),
     'QUIT\r\n'
   ], 
   'endpoint_single_user': [
     'EHLO [localhost]\r\n',
-    'MAIL FROM:<lan.rogers.book@gmail.com>\r\n',
-    'RCPT TO:<lanny@neveraga.in>\r\n',
+    'MAIL FROM:<therothinator@gmail.com>\r\n',
+    'RCPT TO:<skroth@neveraga.in>\r\n',
     'DATA\r\n',
     #generate_pasta_message({'to': 'lanny@neveraga.in'}),
     generate_pasta_message(nice),
