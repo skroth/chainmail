@@ -16,7 +16,14 @@
     [compojure "1.1.6"]
     [selmer "0.5.7"]
     [less-awful-ssl "0.1.1"]]
-  :plugins [[lein-ring "0.7.1"]]
+  :plugins [[lein-ring "0.7.1"] [lein-cljsbuild "0.2.8"]]
+  :cljsbuild
+  {:builds
+   [{
+    :source-path "resources/webmail/cljs",
+     :compiler
+     {:output-dir "resources/webmail/js/cljs",
+      :output-to "resources/webmail/js/cljs/main.js"}}]}
   :profiles {:smtp {:main ^:skip-aot neveragain.core}
              :imap {:main ^:skip-aot neveragain.imap}
              :uberjar {:aot :all}}
