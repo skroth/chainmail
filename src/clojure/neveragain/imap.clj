@@ -1,7 +1,8 @@
 (ns neveragain.imap
   (:require
     (clojure [string :as string]
-             [set :as set-lib])
+             [set :as set-lib]
+             [pprint :as pprint])
     (clojure.core [async :refer [>! <! >!! alts! go go-loop]])
     (swiss [arrows :refer :all])
     (clojure.java [jdbc :as j])
@@ -324,10 +325,6 @@
    "FAST" #{:FLAGS :INTERNALDATE :RFC822.SIZE}
    "FULL" #{:FLAGS :INTERNALDATE :RFC822.SIZE :ENVELOPE :BODY}})
 
-(def message-fields
-  #{:BODY :BODY.PEAK :ENVELOPE :FLAGS :INTERNALDATE :RFC822 :RFC822.HEADER
-    :RFC822.SIZE :RFC822.TEXT :UID})
-
 (defn inclusive-range 
   "Like builtin range but is inclusive on both sides."
   ([stop]
@@ -352,7 +349,24 @@
      :number #{:diget '(:diget :number)}
      :bound #{\* :number}}})
 
+(def fetch-fields-grammar
+  {:start-symbol :S
+   :prod-rules {
+     :S #{:field-name '(\( :WSP :field-name+ :WSP \))}
+     :field-name+ #{'(:field-name :WSP :field-name+) :field-name}
+     :field-name #{"BODY" :ebody :pbody "ENVELOPE" "FLAGS" "INTERNALDATE" "UID"
+                   "RFC822" "RFC822.HEADER" "RFC822.SIZE" "RFC822.TEXT"}
+     :ebody #{'("BODY[" :section+ \])}
+     :pbody #{'("BODY.PEAK[" :section+ \])}
+     :section+ #{'(:section :section+) :section}
+     :section #{"HEADER" "TEXT" "MIME" :header-fields} 
+     :header-fields #{}
+     :WSP #{'(\space :WSP) '(\tab :WSP) :ε}}})
+
 (def fetch-range-pda (pp/cfg-to-ndpda fetch-range-grammar))
+(def fetch-fields-pda (pp/cfg-to-ndpda fetch-fields-grammar))
+
+;(clojure.pprint/pprint (pp/expand-strings fetch-fields-grammar))
 
 (defn parseInt [x] (Integer/parseInt x))
 
@@ -416,12 +430,9 @@
       :else
         (throw (Throwable. "Parse accepted string but captured nothing.")))))
 
+(def message-captures #{})
+
 (defn parse-fetch-args 
-  "Takes an arg string for the IMAP FETCH command and parses it into a vector
-  of sequence numbers and a set of keywords indicating valid fields specified
-  by the arg string. Will expand `:` sequence syntax, so 2:4 will expand to 
-  [2 3 4]. Will expand rfc3501 defined macros so ALL will expand to [:FLAGS
-  :INTERNALDATE :RFC822.SIZE]."
   [args &{:keys [UID]
           :or   {UID false}}]
   (let [[seq-nums item-names & other] (addresses/quote-atom-split args 
@@ -430,19 +441,15 @@
     (if other 
       nil ; Args list is too long, something is wrong
       [(|_|n54ƒ3 seq-nums (if UID "id" "seq_num"))
-       (cond 
-         (contains? fetch-macros item-names)
-           (get fetch-macros item-names)
-         (contains? message-fields (keyword item-names))
-           #{(keyword item-names)}
-         (re-matches #"\(([a-zA-Z0-9.]+)([\s,][a-zA-Z0-9.]+)*\)" item-names)
-           (-<> item-names
-                (.substring 1 (dec (count item-names)))
-                (string/split #"[\s,]+")
-                (map keyword <>)
-                (set)
-                (set-lib/intersection message-fields))
-         :else nil)])))
+       (let [[valid captured] (pp/parse fetch-fields-pda item-names
+                                        #{:field-name})]
+         (println valid)
+         (println captured)
+         (pp/extract item-names captured))])))
+
+(def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
+
+(clojure.pprint/pprint (last (parse-fetch-args long-args)))
 
 (def fetch-query
   "SELECT * FROM messages 

@@ -33,6 +33,22 @@
          (map (fn [x] (if (coll? x) (coll-flatten x) [x]))
               coll)))
 
+(defn rexp 
+  "Walks a nested collection replacing string with char seqs."
+  [x]
+  (cond
+    (string? x) (seq x)
+    ;; If we're iterating over a map, (empty <map entry>) always returns nil,
+    ;; so we just use a vector instead.
+    (coll? x) (into (or (empty x) []) (map rexp x))
+    :else x))
+
+(defn expand-strings
+  "Takes a CFG and expands every rule containing a string to be a sequence
+  of characters, returning the new CFG."
+  [cfg]
+  (assoc cfg :prod-rules (rexp (:prod-rules cfg))))
+
 (defn cfg-to-ndpda
   "Takes the description of a context free grammar and returns a
   non-deterministic push down automaton that recognizes the language generated
@@ -44,7 +60,7 @@
   (loop [q1 [[:q2 :ε :Z :ε]
              [:q1 :ε :ω :ε]]
          Σ '()
-         [[p-sym rules] & remaining] (-> cfg :prod-rules seq)]
+         [[p-sym rules] & remaining] (-> cfg expand-strings :prod-rules seq)]
     (if p-sym
       ; For each rule S -> s make a transition from q1 to q1 popping and
       ; reading nothing and pushing s onto stack so whenever we see S in stack
@@ -188,14 +204,12 @@
                                transitions)]
 
        ; Some debugging stuff. This will get removed eventually.
-       ;(if-not (empty? valid-trans) (do
-       ; (println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-       ; (println "Input: " (conj input-string next-sym))
-       ; (println "State: " current-state)
-       ; (println "Stack: " stack)
-       ; (println "Hist : " cap-hist)
-       ; (println "Valid: " valid-trans)
-       ; ))
+       ;(println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+       ;(println "Input: " (conj input-string next-sym))
+       ;(println "State: " current-state)
+       ;(println "Stack: " stack)
+       ;(println "Hist : " cap-hist)
+       ;(println "Valid: " valid-trans)
 
        ; If there's no valid moves for us to make and we're here it means
        ; there's no path to an accepting state, computation has "locked", and
