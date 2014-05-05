@@ -20,10 +20,12 @@
   :cljsbuild
   {:builds
    [{
-    :source-path "resources/webmail/cljs",
+    :source-path "src/cljs/chainmail",
      :compiler
-     {:output-dir "resources/webmail/js/cljs",
-      :output-to "resources/webmail/js/cljs/main.js"}}]}
+     {;:output-dir "resources/webmail/js/cljs",
+      :output-to "resources/webmail/js/cljs/main.js"
+      :optimizations :whitespace
+      :pretty-print true}}]}
   :profiles {:smtp {:main ^:skip-aot neveragain.core}
              :imap {:main ^:skip-aot neveragain.imap}
              :uberjar {:aot :all}}

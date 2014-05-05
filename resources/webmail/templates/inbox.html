@@ -9,7 +9,7 @@
   <div id="content" class="inner-wrap">
     <div class="left-off-canvas-menu">
       <ul class="off-canvas-list">
-        <li><label>Mail</label></li>
+          <li><label>Mail</label></li>
         <li>
           <a href="#" data-bind="click: function() { $root.activeMessageSet($root.messageSets.inbox) }">
             Inbox
@@ -182,9 +182,4 @@
 <!-- We need the big number library to do our custom ElGamal operation -->
 <script type="text/javascript" src="/js/sjcl.bn.js"></script>
 <script type="text/javascript" src="/js/inbox.js"></script>
-<script type="text/javascript" src="/js/cljs/main.js"></script>
-<script type="text/javascript" src="/js/cljs/inbox.js"></script>
-<script type="text/javascript">
-  goog.require('hello');
-</script>
 {% endblock %}

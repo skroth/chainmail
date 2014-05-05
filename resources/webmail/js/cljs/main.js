@@ -498,6 +498,15 @@ goog.base = function(me, opt_methodName, var_args) {
 goog.scope = function(fn) {
   fn.call(goog.global)
 };
+goog.provide("goog.debug.Error");
+goog.debug.Error = function(opt_msg) {
+  this.stack = (new Error).stack || "";
+  if(opt_msg) {
+    this.message = String(opt_msg)
+  }
+};
+goog.inherits(goog.debug.Error, Error);
+goog.debug.Error.prototype.name = "CustomError";
 goog.provide("goog.string");
 goog.provide("goog.string.Unicode");
 goog.string.Unicode = {NBSP:"\u00a0"};
@@ -925,15 +934,6 @@ goog.string.toSelectorCaseCache_ = {};
 goog.string.toSelectorCase = function(str) {
   return goog.string.toSelectorCaseCache_[str] || (goog.string.toSelectorCaseCache_[str] = String(str).replace(/([A-Z])/g, "-$1").toLowerCase())
 };
-goog.provide("goog.debug.Error");
-goog.debug.Error = function(opt_msg) {
-  this.stack = (new Error).stack || "";
-  if(opt_msg) {
-    this.message = String(opt_msg)
-  }
-};
-goog.inherits(goog.debug.Error, Error);
-goog.debug.Error.prototype.name = "CustomError";
 goog.provide("goog.asserts");
 goog.provide("goog.asserts.AssertionError");
 goog.require("goog.debug.Error");
@@ -20801,9 +20801,19 @@ cljs.core.UUID.prototype.toString = function() {
   return cljs.core.pr_str.call(null, this__10135)
 };
 cljs.core.UUID;
-goog.provide("hello");
+goog.provide("inbox");
 goog.require("cljs.core");
-hello.greet = function greet(n) {
-  return[cljs.core.str("Hello "), cljs.core.str(n)].join("")
+inbox.SETTINGS = cljs.core.ObjMap.fromObject(["\ufdd0'date-time-format", "\ufdd0'max-line-length"], {"\ufdd0'date-time-format":"%a %b %d %I:%M %p", "\ufdd0'max-line-length":78});
+inbox.app_view_model = function app_view_model() {
+  var this__6194 = this;
+  this__6194.firstName = ko.observable("Bert");
+  this__6194.lastName = ko.observable("Bertington");
+  this__6194.fullName = ko.computed(function() {
+    return[cljs.core.str(this__6194.firstName()), cljs.core.str(" "), cljs.core.str(this__6194.lastName())].join("")
+  }, this__6194);
+  this__6194.capitalizeLastName = function() {
+    return this__6194.lastName(this__6194.lastName().toUpperCase())
+  };
+  return null
 };
-goog.exportSymbol("hello.greet", hello.greet);
+ko.applyBindings(new inbox.app_view_model);

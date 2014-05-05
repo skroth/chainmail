@@ -23,6 +23,7 @@
 (defroutes url-routes
   (GET "/" [request] views/index)
   (GET "/login" [request] (direct-to-template "login.html"))
+  (GET "/test" [request] (direct-to-template "test.html"))
   (POST "/login" [request] views/login)
   (GET "/logout" [request] (login-required views/logout))
   (POST "/register" [request] views/register)
