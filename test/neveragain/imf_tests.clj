@@ -9,9 +9,9 @@
         case-two (imf/unfold "this is a\r\ntest of a\r\nmulti line")
         case-three (imf/unfold (str "this is the\r\n most rigerous\r\n"
                                     "test yet. Two lines"))]
-    (is (= (count case-one) 1))
-    (is (= (count case-two) 3))
-    (is (= (count case-two) 2))))
+    (is (= (count (string/split case-one #"\r\n")) 1))
+    (is (= (count (string/split case-two #"\r\n")) 3))
+    (is (= (count (string/split case-three #"\r\n")) 2))))
 
 (defn oldify 
   "Make swap unix style line endings for the old ass CRLF style."
@@ -27,15 +27,15 @@ Subject: This is a well formed
  email, god damnit!
 Message-Id: <20050413022403.4653B14112@gmail.com>
 Date: Tue, 12 Apr 2005 22:24:03 -0400 (EDT)
-               
+
 Sup braj? This here is an email, beleive it
 or not. It has multiple lines and a little bit
 of whitespace escapery but it is, to the best
 of my knowledge, a valid rfc2822 message."))
 
-(def exp-two (oldify "This: is: not
+(def exp-two (oldify "This: is: horrible
 
-and it really shouldn't parse"))
+but I guess it should parse"))
 
 (def exp-three (oldify "To: lanny@neveraga.in
 From: lan.rogers.book@gmail.com
@@ -51,7 +51,6 @@ Subject: This one has no body at all!\n"))
         result-two (imf/parse exp-two)
         result-three (imf/parse exp-three)
         result-four (imf/parse exp-four)]
-    (is (nil? result-two))
     (is (nil? result-three))
 
     (is result-one)
@@ -60,6 +59,4 @@ Subject: This one has no body at all!\n"))
     (is (:headers result-one))
     (is (:body result-one))
     (is (= (:To (:headers result-one)) "lanny@neveraga.in"))
-    (is (= (:From (:headers result-one)) "lan.rogers.book@gmail.com"))
-    )
-  )
+    (is (= (:From (:headers result-one)) "lan.rogers.book@gmail.com"))))
