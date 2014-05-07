@@ -449,7 +449,7 @@
 
 (def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
 
-(clojure.pprint/pprint (last (parse-fetch-args long-args)))
+;(clojure.pprint/pprint (last (parse-fetch-args long-args)))
 
 (def fetch-query
   "SELECT * FROM messages 
