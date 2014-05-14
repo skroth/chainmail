@@ -3,6 +3,8 @@
     (clojure [string :as string]
              [set :as mset])))
 
+(defn pnr [x] (println x) x)
+
 (def alpha (set (map char (concat (range 65 91) (range 97 123) [\space]))))
 
 (def paren-balancer
@@ -238,24 +240,32 @@
                     i-string (rest i-string))
         ; Pop round
         nstack (if (ε? ts-sym) stack (rest stack))
+        ; Add omega if need be
+        nstack (if (captures (first stack))
+                 (conj nstack :ω)
+                 nstack)
         ; Push round
-        nstack (if (ε? tp-sym) 
+        nstack (if (ε? tp-sym)
                  nstack 
                  (if (= tp-sym :<>) ; See `the magic of :<>` above
                    (conj nstack (first i-string))
                    (εpush tp-sym nstack)))
         ; Add an entry to cap history if just popped a capture symbol
-        ncap-hist (if (captures (first stack)) 
+        ncap-hist (if (captures (first stack))
                     (conj cap-hist [ts-sym (count i-string) nil])
                     cap-hist)
         close-target (if (= :ω (first stack))
                        (last-index (fn [[_ __ x]] (nil? x)) cap-hist) 0)
+
+        ncap-hist (if (captures (first stack)) 
+                    (conj cap-hist [ts-sym (count ni-string) nil])
+                    cap-hist)
         ncap-hist (if (= :ω (first stack)) 
-                    (assoc cap-hist
+                    (assoc ncap-hist
                            close-target
-                           (assoc (get cap-hist close-target)
+                           (assoc (get ncap-hist close-target)
                                   2 (count i-string)))
-                    cap-hist)]
+                    ncap-hist)]
     [ni-string nstack tstate ncap-hist]))
 
 (defn |-*
@@ -267,9 +277,10 @@
                                 (and (ε= ti-sym (first i-string))
                                      (ε= ts-sym (first stack))))
                               (-> pda :program state))]
-      (println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-      (println "Input:" i-string)
-      (println "Stack:" stack)
+      ;(println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+      ;(println "Input:" i-string)
+      ;(println "Stack:" stack)
+      ;(println "Histo:" cap-hist)
 
       (if (empty? valid-moves)
         ; We've either finished, failed, or need to try a different parse path

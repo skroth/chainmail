@@ -26,7 +26,7 @@
 
 (def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
 
-(last (parse-fetch-args long-args))
+(last (imap/parse-fetch-args long-args))
 
 (def long-fields #{
   '(:INTERNALDATE) 
@@ -36,7 +36,7 @@
   '(:BODY.PEAK '(:HEADER.FIELDS '(:date :subject :from :to :cc :message-id
                                   :in-reply-to :refrences :x-priority 
                                   :x-uniform-type-identifier :received-spf 
-                                  :x-spam-status :x-span-flag)))}
+                                  :x-spam-status :x-span-flag)))})
 
 (deftest test-imap-parse-fetch-args
   (loop [[[s [nums fields]] & remaining] 
@@ -53,7 +53,7 @@
           ["(1,2) SLOW" ["seq_num IN (2, 1)" nil]]
           ["1:2* FLAGS" [nil #{:FLAGS}]]
           ["1:* FLAGS" ["seq_num >= 1" #{:FLAGS}]]
-          [longargs ["set_num = 1" long-fileds]]]
+          [long-args ["set_num = 1" long-fields]]]]
     (let [[r-nums r-fields] (imap/parse-fetch-args s)]
       (is (= r-nums nums))
       (is (= r-fields fields))

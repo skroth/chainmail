@@ -55,9 +55,6 @@
 
 (def addr-spec-pda (pp/cfg-to-ndpda addr-spec-grammar))
 
-(print (filter (fn [x] (= (nth x 2) :atext)) (-> addr-spec-pda :program :q1)))
-
-
 (defn quote-atom-split 
   "Takes a string and optionally a seperator (defaults to space), returns a 
    vector of the string split on the seperator so long as it does not occur
