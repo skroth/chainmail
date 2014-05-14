@@ -3,6 +3,8 @@
     (clojure [string :as string]
              [set :as mset])))
 
+(defn pnr [x] (println x) x)
+
 (def alpha (set (map char (concat (range 65 91) (range 97 123) [\space]))))
 
 (def paren-balancer
@@ -32,6 +34,22 @@
   (apply concat
          (map (fn [x] (if (coll? x) (coll-flatten x) [x]))
               coll)))
+
+(defn rexp 
+  "Walks a nested collection replacing string with char seqs."
+  [x]
+  (cond
+    (string? x) (seq x)
+    ;; If we're iterating over a map, (empty <map entry>) always returns nil,
+    ;; so we just use a vector instead.
+    (coll? x) (into (or (empty x) []) (map rexp x))
+    :else x))
+
+(defn expand-strings
+  "Takes a CFG and expands every rule containing a string to be a sequence
+  of characters, returning the new CFG."
+  [cfg]
+  (assoc cfg :prod-rules (rexp (:prod-rules cfg))))
 
 (defn cfg-to-ndpda
   "Takes the description of a context free grammar and returns a
@@ -164,57 +182,131 @@
     (let [v (pred f)]
       (if (first v) v (recur pred remaining)))))
 
+;(defn parse
+;  "Takes a description of a PDA, a string, and optionally a set of non-terminal
+;;  symbols which will be captured and returned. Returned value is a two item
+;  list of (accepted, captured) where captured is a map from non-terminal
+;  symbols to their value within the string."
+;  {:arglists '([pda string captures])}
+;  ([pda s captures]
+;   (parse pda (seq s) (:start-state pda) '() captures []))
+;
+;  ([pda [next-sym & input-string] current-state stack captures cap-hist]
+;   (if (and (not next-sym) (empty? stack))
+;     ; If there's nothing left to read and the stack is empty it's time to
+;     ; check if current-state is accepting.
+;     (if (current-state (:accepting pda)) (list true cap-hist) false)
+;
+;     ; Otherwise figure out which transitions we can make given the current
+;     ; configuration.
+;     (let [transitions (-> pda :program current-state)
+;           valid-trans (filter (fn [[_ i-sym s-sym __]]
+;                                (and (ε= i-sym next-sym)
+;                                     (ε= s-sym (first stack))))
+;                               transitions)]
+;
+;       ; Some debugging stuff. This will get removed eventually.
+;       ;(println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+;       ;(println "Input: " (conj input-string next-sym))
+;       ;(println "State: " current-state)
+;       ;(println "Stack: " stack)
+;       ;(println "Hist : " cap-hist)
+;       ;(println "Valid: " valid-trans)
+;
+;       ; If there's no valid moves for us to make and we're here it means
+;       ; there's no path to an accepting state, computation has "locked", and
+;       ; this particular search path does not accept the input string.
+;       (if-not (seq valid-trans) (list false nil)
+;         ; But if that isn't the case make the appropriate adjustments to the
+;         ; configuration and recur for each potential transition.
+;         (first-accepted
+;           (fn [trans]
+;             (apply parse (apply-transition trans pda next-sym input-string
+;                                            current-state stack captures
+;                                            cap-hist)))
+;           valid-trans))))))
+
+
+;; The Magic of :<>
+;; One of the slowest parts of this process if finding valid moves once in
+;; a given configuration. When we know only terminal
+
+(defn |-
+  [transition i-string stack state cap-hist captures]
+  (let [[tstate ti-sym ts-sym tp-sym] transition
+        ; Read if the program doesn't specify an episilon transition
+        ni-string (if (or (ε? ti-sym)
+                          (= tp-sym :<>)) ; See `the magic of :<>` above
+                    i-string (rest i-string))
+        ; Pop round
+        nstack (if (ε? ts-sym) stack (rest stack))
+        ; Add omega if need be
+        nstack (if (captures (first stack))
+                 (conj nstack :ω)
+                 nstack)
+        ; Push round
+        nstack (if (ε? tp-sym)
+                 nstack 
+                 (if (= tp-sym :<>) ; See `the magic of :<>` above
+                   (conj nstack (first i-string))
+                   (εpush tp-sym nstack)))
+        ; Add an entry to cap history if just popped a capture symbol
+        ncap-hist (if (captures (first stack))
+                    (conj cap-hist [ts-sym (count i-string) nil])
+                    cap-hist)
+        close-target (if (= :ω (first stack))
+                       (last-index (fn [[_ __ x]] (nil? x)) cap-hist) 0)
+
+        ncap-hist (if (captures (first stack)) 
+                    (conj cap-hist [ts-sym (count ni-string) nil])
+                    cap-hist)
+        ncap-hist (if (= :ω (first stack)) 
+                    (assoc ncap-hist
+                           close-target
+                           (assoc (get ncap-hist close-target)
+                                  2 (count i-string)))
+                    ncap-hist)]
+    [ni-string nstack tstate ncap-hist]))
+
+(defn |-*
+  [pda s captures]
+  (loop [[p & paths] (list [[:q0 :ε :ε :ε] (seq s) '() 
+                            (:start-state pda) [] captures])]
+    (let [[i-string stack state cap-hist] (apply |- p)
+          valid-moves (filter (fn [[_ ti-sym ts-sym _]]
+                                (and (ε= ti-sym (first i-string))
+                                     (ε= ts-sym (first stack))))
+                              (-> pda :program state))]
+      ;(println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+      ;(println "Input:" i-string)
+      ;(println "Stack:" stack)
+      ;(println "Histo:" cap-hist)
+
+      (if (empty? valid-moves)
+        ; We've either finished, failed, or need to try a different parse path
+        (if (and (empty? i-string) (empty? stack) (-> pda :accepting state))
+          ; Accepted, woo!
+          [true cap-hist]
+          (if (empty? paths)
+            ; Nothing left to do but reject the string
+            [false nil]
+
+            ; THERE IS YET HOPE!
+            (recur paths)))
+
+        ; Looks like there are moves to be made after all. 
+        (recur (apply conj paths (for [move valid-moves]
+                                   [move i-string stack 
+                                    state cap-hist captures])))))))
 (defn parse
-  "Takes a description of a PDA, a string, and optionally a set of non-terminal
-  symbols which will be captured and returned. Returned value is a two item
-  list of (accepted, captured) where captured is a map from non-terminal
-  symbols to their value within the string."
-  {:arglists '([pda string captures])}
-  ([pda s captures]
-   (parse pda (seq s) (:start-state pda) '() captures []))
-
-  ([pda [next-sym & input-string] current-state stack captures cap-hist]
-   (if (and (not next-sym) (empty? stack))
-     ; If there's nothing left to read and the stack is empty it's time to
-     ; check if current-state is accepting.
-     (if (current-state (:accepting pda)) (list true cap-hist) false)
-
-     ; Otherwise figure out which transitions we can make given the current
-     ; configuration.
-     (let [transitions (-> pda :program current-state)
-           valid-trans (filter (fn [[_ i-sym s-sym __]]
-                                (and (ε= i-sym next-sym)
-                                     (ε= s-sym (first stack))))
-                               transitions)]
-
-       ; Some debugging stuff. This will get removed eventually.
-       ;(if-not (empty? valid-trans) (do
-       ; (println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-       ; (println "Input: " (conj input-string next-sym))
-       ; (println "State: " current-state)
-       ; (println "Stack: " stack)
-       ; (println "Hist : " cap-hist)
-       ; (println "Valid: " valid-trans)
-       ; ))
-
-       ; If there's no valid moves for us to make and we're here it means
-       ; there's no path to an accepting state, computation has "locked", and
-       ; this particular search path does not accept the input string.
-       (if-not (seq valid-trans) (list false nil)
-         ; But if that isn't the case make the appropriate adjustments to the
-         ; configuration and recur for each potential transition.
-         (first-accepted
-           (fn [trans]
-             (apply parse (apply-transition trans pda next-sym input-string
-                                            current-state stack captures
-                                            cap-hist)))
-           valid-trans))))))
+  [a b c]
+  (|-* a b c))
 
 (defn accepts?
   "Takes a description of a PDA and a string, returns true if the PDA accepts
   the string and false otherwise."
   [pda s]
-  (-> (parse pda s #{})
+  (-> (|-* pda s #{})
       first
       true?))
 

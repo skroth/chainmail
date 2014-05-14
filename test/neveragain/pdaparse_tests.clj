@@ -15,6 +15,7 @@
     (is (= (pp/accepts? pda s) a))
     (if-not (empty? remaining) (recur remaining))))
 
+
 (deftest test-parse
   (let [address "lan.rogers.book@gmail.com" 
         result (pp/parse (pp/cfg-to-ndpda addresses/addr-spec-grammar)
