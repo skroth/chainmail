@@ -3,7 +3,7 @@
     (clojure [string :as string]
              [set :as set-lib]
              [pprint :as pprint])
-    (clojure.core [async :refer [>! <! >!! alts! go go-loop]])
+    (clojure.core [async :refer [>! <! >!! alts! go go-loop chan]])
     (swiss [arrows :refer :all])
     (clojure.java [jdbc :as j])
     (neveragain [common :as common]
@@ -14,6 +14,7 @@
                 [async-serv :as as]))
   (:import
     (java.util Date)
+    (java.io File)
     (org.mindrot.jbcrypt BCrypt)))
 
 (defn pnr [x] (println x) x)
@@ -600,21 +601,23 @@
                   "LOGOUT" (wrap-pure-imap-verb logout)
                   "UID" (wrap-pure-imap-verb uid-mux)})
 
+(def reload-chan (chan 2))
+
 (defn connection-handler
   [r-chan w-chan]
   (>!! w-chan 
        "* OK Hail! ChainMail IMAP server at thine service my liege!\r\n")
-  (go-loop [read-val (<! r-chan)
+  (go-loop [[read-val source] (alts! [r-chan reload-chan])
             session {}]
     (try
       (let [[line tag verb args] (re-matches #"(.+?)\s(\S+)\s?(.+)?" read-val)]
         (if-not line
           (do
             (>!! w-chan "* BAD Hark knave, thine command parses not!\r\n")
-            (recur (<! r-chan) session))
+            (recur (alts! [r-chan reload-chan]) session))
           (let [handler (get handler-map (.toUpperCase verb) null-verb)
                 new-session (handler session r-chan w-chan [line tag verb args])]
-            (recur (<! r-chan) new-session))))
+            (recur (alts! [r-chan reload-chan]) new-session))))
       (catch Exception e
         (do
           (>!! w-chan
@@ -622,9 +625,21 @@
           (println "Wowah, exception:\n" e)
           (.printStackTrace e))))))
 
+(def imap-ns (ns-name *ns*))
 
 (defn serve-forever
   [port]
+  (if (pos?  settings/reload-interval)
+    (future ; Run the reloader in another thread
+      (loop [file (File. "src/clojure/neveragain/imap.clj")
+             last-mod (.lastModified file)]
+        (Thread/sleep (* settings/reload-interval 1000))
+        (if (> (.lastModified file) last-mod)
+          (do
+            (println "Reloading imap namespace")
+            (require imap-ns :reload)
+            (recur file (.lastModified file)))
+          (recur file last-mod)))))
   (as/serve-forever port connection-handler))
 
 (defn -main [& args]
