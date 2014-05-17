@@ -39,7 +39,7 @@
                                   :x-spam-status :x-span-flag)))})
 
 (deftest test-imap-parse-fetch-args
-  (loop [[[s [nums fields]] & remaining] 
+  (loop [[[s [nums fields]] & remaining]
          [["5 FLAGS" ["seq_num = 5" #{:FLAGS}]] 
           ["42 (FLAGS ENVELOPE)" ["seq_num = 42" #{:FLAGS :ENVELOPE}]]
           ["42 ALL" ["seq_num = 42" #{:FLAGS :INTERNALDATE 

@@ -9,11 +9,11 @@
     (less.awful [ssl :as las]))
 
   (:import
-    (java.util.concurrent Executors)
     (javax.net.ssl SSLSocket SSLServerSocket)
     (java.net ServerSocket InetAddress)
     (java.util.concurrent Executors)
-    (java.io PrintWriter)
+    (java.util Date)
+    (java.io PrintWriter File)
     (java.util Scanner NoSuchElementException)))
 
 (defn rewrite-ehlo [v-map ext-list]
@@ -37,18 +37,60 @@
   neveragain.rfc/extension-description
   neveragain.auth/extension-description
   neveragain.tls/extension-description
-  neveragain.x-cm-login/extension-description
-])
+  neveragain.x-cm-login/extension-description ])
 
-(def verb-handler-map (rewrite-ehlo (reduce
-  (fn [v-map extension]
-    ((:install-handlers extension) v-map))
-  {} enabled-extensions) enabled-extensions))
+(defn create-verb-handler-map [enabled]
+  (rewrite-ehlo (reduce
+    (fn [v-map extension]
+      ((:install-handlers extension) v-map))
+    {} enabled) enabled))
+
+(def verb-handler-map
+  "A map from string verb names to handler functions. Wrap in a atom so we can
+  reload when the source files are updated."
+  (atom (create-verb-handler-map enabled-extensions)))
+
+(defn reloader [handler-map-atom]
+  "Extension descriptions can specify a set of files to watch, this function
+  will poll their modification dates and if they've been updated we'll reload
+  the corrosponding namespace. Will loop infinitely."
+  (let [watched (filter (fn [x] (:watched-files x)) enabled-extensions)
+        ; Build up 3-tuples of namespace/watched files/last modifictaion
+        ns-file-pairs (for [ext watched]
+                        [(:ns ext)
+                         (for [path (:watched-files ext)] (File. path))
+                         (.getTime (java.util.Date.))])]
+    ; This is the core loop, because modification dates will change as the
+    ; files are modified we'll continually recur with modified data
+    (loop [nfp ns-file-pairs]
+      ; Don't want to spend all our CPU time polling files.
+      (Thread/sleep (* settings/reload-interval 1000))
+
+      (-> (for [[ns-sym files last-mod] nfp]
+            ; Check that at least one file has been modified since we last
+            ; loaded it.
+            (if (some identity
+                      (for [file files] 
+                        (> (.lastModified file) last-mod)))
+              (do
+                ; One has? Great, rebuild the verb handler map
+                (println "Reloading ns:" ns-sym)
+                (require ns-sym :reload)
+                (swap! handler-map-atom
+                       (fn [a] (create-verb-handler-map enabled-extensions)))
+
+                ; Update last reload time for this ns to now
+                [ns-sym files (.getTime (java.util.Date.))])
+
+              ; No updates? Cool, we'll just reuse this data without changes
+              [ns-sym files last-mod]))
+          (doall) ; Force those side-effects!
+          (recur)))))
 
 (defn respond [conn msg envl]
   ; Pop out the verb, force uppercase, execute corrosponding function
   ((get
-    verb-handler-map
+    @verb-handler-map
     (string/upper-case (get (string/split msg #"\s") 0))
     (fn [msg conn envl]
       ; Backup func in case we don't have a handler for this verb
@@ -89,14 +131,20 @@
 
 (defn -main [& args]
   (println settings/banner)
-  (let [reg-server (-> (ServerSocket. settings/smtp-port)
+  ; Start threads for normal server, TLS server, and reloader
+  (let [reloader-future (if (pos? settings/reload-interval)
+                          (future (reloader verb-handler-map))
+                          (atom nil))
+        reg-server (-> (ServerSocket. settings/smtp-port)
                        (serve-forever settings/thread-count)
                        (future))
         ssl-server (-<> [(:key settings/keyfiles)
                          (:cert settings/keyfiles)
                          (:ca settings/keyfiles)]
                         (apply las/ssl-context <>)
-                        (las/server-socket "localhost" settings/tls-smtp-port))]
+                        (las/server-socket "localhost" 
+                                           settings/tls-smtp-port))]
     (.setNeedClientAuth ssl-server false)
     (serve-forever ssl-server settings/thread-count)
-    (deref reg-server)))
+    (deref reg-server)
+    (deref reloader-future)))

@@ -86,6 +86,8 @@
 (def extension-description {
   :name "rfc2821"
   :advertise false
+  :ns (ns-name *ns*)
+  :watched-files ["src/clojure/neveragain/rfc.clj"]
   :install-handlers (fn [v-map]
     (merge v-map verb-handler-map))
   })

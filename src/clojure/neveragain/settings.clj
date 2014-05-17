@@ -11,6 +11,10 @@
                :ca "../ssl/demoCA/cacert.pem"
                })
 
+;; The time, in seconds, to wait between rescans of watched files for changes.
+;; set to -1 to disable reloading.
+(def reload-interval 1)
+
 (def thread-count 1)
 (def smtp-port 2500)
 (def tls-smtp-port 4650)
