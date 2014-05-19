@@ -42,7 +42,10 @@
     (string? x) (seq x)
     ;; If we're iterating over a map, (empty <map entry>) always returns nil,
     ;; so we just use a vector instead.
-    (coll? x) (into (or (empty x) []) (map rexp x))
+    (coll? x) (into (or (empty x) []) 
+                    (if (seq? x)
+                      (reverse (map rexp x))
+                      (map rexp x)))
     :else x))
 
 (defn expand-strings
@@ -182,55 +185,14 @@
     (let [v (pred f)]
       (if (first v) v (recur pred remaining)))))
 
-;(defn parse
-;  "Takes a description of a PDA, a string, and optionally a set of non-terminal
-;;  symbols which will be captured and returned. Returned value is a two item
-;  list of (accepted, captured) where captured is a map from non-terminal
-;  symbols to their value within the string."
-;  {:arglists '([pda string captures])}
-;  ([pda s captures]
-;   (parse pda (seq s) (:start-state pda) '() captures []))
-;
-;  ([pda [next-sym & input-string] current-state stack captures cap-hist]
-;   (if (and (not next-sym) (empty? stack))
-;     ; If there's nothing left to read and the stack is empty it's time to
-;     ; check if current-state is accepting.
-;     (if (current-state (:accepting pda)) (list true cap-hist) false)
-;
-;     ; Otherwise figure out which transitions we can make given the current
-;     ; configuration.
-;     (let [transitions (-> pda :program current-state)
-;           valid-trans (filter (fn [[_ i-sym s-sym __]]
-;                                (and (ε= i-sym next-sym)
-;                                     (ε= s-sym (first stack))))
-;                               transitions)]
-;
-;       ; Some debugging stuff. This will get removed eventually.
-;       ;(println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-;       ;(println "Input: " (conj input-string next-sym))
-;       ;(println "State: " current-state)
-;       ;(println "Stack: " stack)
-;       ;(println "Hist : " cap-hist)
-;       ;(println "Valid: " valid-trans)
-;
-;       ; If there's no valid moves for us to make and we're here it means
-;       ; there's no path to an accepting state, computation has "locked", and
-;       ; this particular search path does not accept the input string.
-;       (if-not (seq valid-trans) (list false nil)
-;         ; But if that isn't the case make the appropriate adjustments to the
-;         ; configuration and recur for each potential transition.
-;         (first-accepted
-;           (fn [trans]
-;             (apply parse (apply-transition trans pda next-sym input-string
-;                                            current-state stack captures
-;                                            cap-hist)))
-;           valid-trans))))))
-
-
 ;; The Magic of :<>
 ;; One of the slowest parts of this process if finding valid moves once in
-;; a given configuration. When we know only terminal
-
+;; a given configuration. When we know a non-terminal can only expand to
+;; terminals then it's obvious which terminal we need to expand to (the one
+;; that matches the next symbol in the input string), so in these cases the
+;; CFG to PDA compiler will substitute `:<>` for the push symbol, signaling we
+;; should push the first input character if it is in the set of possible push
+;; values.
 (defn |-
   [transition i-string stack state cap-hist captures]
   (let [[tstate ti-sym ts-sym tp-sym] transition
