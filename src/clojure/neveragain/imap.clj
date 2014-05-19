@@ -350,24 +350,38 @@
      :number #{:diget '(:diget :number)}
      :bound #{\* :number}}})
 
+(def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
+
 (def fetch-fields-grammar
   {:start-symbol :S
    :prod-rules {
      :S #{:field-name '(\( :WSP :field-name+ :WSP \))}
-     :field-name+ #{'(:field-name :WSP :field-name+) :field-name}
+     :field-name+ #{'(:field-name :WSP :field-name+) :ε}
      :field-name #{"BODY" :ebody :pbody "ENVELOPE" "FLAGS" "INTERNALDATE" "UID"
                    "RFC822" "RFC822.HEADER" "RFC822.SIZE" "RFC822.TEXT"}
-     :ebody #{'("BODY[" :section+ \])}
-     :pbody #{'("BODY.PEAK[" :section+ \])}
-     :section+ #{'(:section :section+) :section}
-     :section #{"HEADER" "TEXT" "MIME" :header-fields} 
-     :header-fields #{}
-     :WSP #{'(\space :WSP) '(\tab :WSP) :ε}}})
+     :ebody #{(-> (seq "BODY[") (list :section+ \]) (flatten))}
+     :pbody #{(-> (seq "BODY.PEEK[") (list :section+ \]) (flatten))}
+     :section+ #{'(:section :WSP :section+) :section}
+     :section #{"HEADER" "TEXT" "MIME" :header-fields}
+     :header-fields #{(-> "HEADER.FIELDS" 
+                          seq (list :WSP \( :hfield+ \)) flatten)}
+     :hfield+ #{'(:hfield :WSP :hfield+) :ε}
+     :hfield #{:atext+}
+     :atext+ #{'(:atext :atext+) :atext}
+     :atext (set-lib/union (set (map char (concat (range 48 58)
+                                                  (range 65 90)
+                                                  (range 97 122))))
+                           #{\! \# \$ \% \& \' \* \- \/ 
+                             \= \? \^ \_ \` \{ \| \} \~})
+     :WSP #{:ε '(\space :WSP) '(\tab :WSP)}}})
 
 (def fetch-range-pda (pp/cfg-to-ndpda fetch-range-grammar))
-(def fetch-fields-pda (pp/cfg-to-ndpda fetch-fields-grammar))
+(def fetch-fields-pda (-> fetch-fields-grammar
+                          (pp/expand-strings)
+                          (pp/cfg-to-ndpda)))
 
-;(clojure.pprint/pprint (pp/expand-strings fetch-fields-grammar))
+;(clojure.pprint/pprint fetch-fields-pda)
+
 
 (defn parseInt [x] (Integer/parseInt x))
 
@@ -443,10 +457,12 @@
       nil ; Args list is too long, something is wrong
       [(|_|n54ƒ3 seq-nums (if UID "id" "seq_num"))
        (let [[valid captured] (pp/parse fetch-fields-pda item-names
-                                        #{:field-name})]
+                                        #{:field-name :hfield :section})]
          (pp/extract item-names captured))])))
 
-(def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
+;(def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
+
+;(def long-args "1 (INTERNALDATE UID RFC822.SIZE BODY.PEEK[MIME HEADER.FIELDS(date)])")
 
 ;(clojure.pprint/pprint (last (parse-fetch-args long-args)))
 
