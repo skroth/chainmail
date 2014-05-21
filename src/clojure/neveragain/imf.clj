@@ -51,7 +51,7 @@
   keywordized first half of the string and the normal second half."
   [delimiter s]
   (let [[k v] (string/split s delimiter 2)]
-    [(keyword k) v]))
+    [(keyword (.toLowerCase k)) v]))
 
 (defn semantically-valid?
   "Returns true if the parsed message is semantically valid, that is to say

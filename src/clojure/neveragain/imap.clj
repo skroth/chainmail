@@ -3,7 +3,7 @@
     (clojure [string :as string]
              [set :as set-lib]
              [pprint :as pprint])
-    (clojure.core [async :refer [>! <! >!! alts! go go-loop chan]])
+    (clojure.core [async :refer [>! <! >!! go go-loop chan]])
     (swiss [arrows :refer :all])
     (clojure.java [jdbc :as j])
     (neveragain [common :as common]
@@ -460,11 +460,11 @@
                                         #{:field-name :hfield :section})]
          (pp/extract item-names captured))])))
 
-;(def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
+(def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
 
-;(def long-args "1 (INTERNALDATE UID RFC822.SIZE BODY.PEEK[MIME HEADER.FIELDS(date)])")
+;(def long-args "1 (INTERNALDATE UID )")
 
-;(clojure.pprint/pprint (last (parse-fetch-args long-args)))
+;(clojure.pprint/pprint (parse-fetch-args long-args))
 
 (def fetch-query
   "SELECT * FROM messages 
@@ -488,6 +488,28 @@
   (format "{%d}%s" (alength (.getBytes s "UTF-8")) s))
                 
 
+(defn extract-sections
+  ""
+  [fields message]
+  (->> (for [section (:section fields)]
+         (cond
+           (= section "HEADER")
+             (->> message
+                  (:headers)
+                  (map (fn [[k v]] (str (name k) ": " v)))
+                  (string/join "\n"))
+           (= section "TEXT")
+             (:body message)
+           (re-matches #"HEADER.FIELDS\s?\(.+\)" section)
+             (let [hfields (set (:hfield fields))]
+               (->> message
+                    (:headers)
+                    (filter (fn [[k v]] (contains? hfields (name k))))
+                    (map (fn [[k v]] (str (name k) ": " v)))
+                    (string/join "\r\n")))))
+       (string/join "\r\n")
+       (transmit-fmt)))
+
 (defn format-record
   "Takes a database record and formats it as one 'line' to be sent over imap"
   [record fields session db UID]
@@ -495,26 +517,41 @@
                      (:user)
                      (addresses/c-addr)
                      (common/daemon-wrap record))
+        parsed (imf/parse wrapped)
         cur-num ((if UID :id :seq_num) record)]
-    (->> (for [field fields]
+    (->> (for [field (:field-name fields)]
            (cond
-             (= field :FLAGS)
+             (= field "FLAGS")
                (->> [fetch-flags-sql (:id record)]
                     (j/query db)
                     (map :name)
                     (string/join " ")
                     (format "FLAGS (%s)"))
-             (= field :UID)
+             (= field "UID")
                (format "UID %d" (:id record))
-             (= field :INTERNALDATE)
+             (= field "INTERNALDATE")
                (->> record
                     (:recv_date)
                     (* 1000)
                     (Date.)
                     (imf/fmt-date)
                     (str "INTERNALDATE "))
-             (= field :BODY)
-               (str "BODY " (transmit-fmt wrapped))))
+             (= field "RFC822.SIZE")
+               (->> (.getBytes wrapped "UTF-8")
+                    (alength)
+                    (format "RFC822.SIZE %d"))
+             (= field "BODY")
+               (str "BODY " (transmit-fmt wrapped))
+             (re-matches #"^BODY.PEEK\[.*\]$" field)
+               (str field " "
+                    (extract-sections fields parsed))
+             (re-matches #"^BODY\[.*\]$" field)
+               (do
+                 ; Do our database jazz here.
+                 (str field " "
+                      (extract-sections fields parsed))
+             :else
+               (throw (Throwable. "Unrecognized field name"))))
 
          (string/join " ")
          (format "%d FETCH (%s)" cur-num))))
@@ -617,26 +654,24 @@
                   "LOGOUT" (wrap-pure-imap-verb logout)
                   "UID" (wrap-pure-imap-verb uid-mux)})
 
-(def reload-chan (chan 2))
-
 (defn connection-handler
   [r-chan w-chan]
   (>!! w-chan 
        "* OK Hail! ChainMail IMAP server at thine service my liege!\r\n")
-  (go-loop [[read-val source] (alts! [r-chan reload-chan])
+  (go-loop [read-val (<! r-chan)
             session {}]
     (try
       (let [[line tag verb args] (re-matches #"(.+?)\s(\S+)\s?(.+)?" read-val)]
         (if-not line
           (do
-            (>!! w-chan "* BAD Hark knave, thine command parses not!\r\n")
-            (recur (alts! [r-chan reload-chan]) session))
+            (>! w-chan "* BAD Hark knave, thine command parses not!\r\n")
+            (recur (<! r-chan) session))
           (let [handler (get handler-map (.toUpperCase verb) null-verb)
                 new-session (handler session r-chan w-chan [line tag verb args])]
-            (recur (alts! [r-chan reload-chan]) new-session))))
+            (recur (<! r-chan) new-session))))
       (catch Exception e
         (do
-          (>!! w-chan
+          (>! w-chan
                "* BAD Hark! Unspecified failure, woe upon thee knave!\r\n")
           (println "Wowah, exception:\n" e)
           (.printStackTrace e))))))
