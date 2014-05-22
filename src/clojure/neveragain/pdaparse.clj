@@ -277,8 +277,8 @@
   stop] identifying a substring of s and its name. Returns a map of names to
   sets of substrings identified in parts as having that name. Used with the
   second value in the output of `parse`. If optional argument `singles` is 
-  true will assume only one instance of each capture will appear and will
-  return a map of string rather than lists."
+  true, will assume only one instance of each capture will appear and will
+  return a map of string rather than lsit values."
   [s parts &{:keys [singles]
               :or  {singles false}}]
   (let [len (count s)]
@@ -292,4 +292,45 @@
                         (conj (get r part)
                               (subs s (- len start) (- len end)))
                         (subs s (- len start) (- len end)))))))))
+(def l (list [:a 1 20]
+             [:b 1 5]
+             [:c 6 20]
+             [:d 10 15]
+             [:e 23 30]))
+
+(defn structure
+  [s parts]
+  (reduce (fn [x [c s e]]
+            (let [chain (loop [[[cc cs ce] & subss] x
+                               chain []]
+                          (if (and cc cs ce
+                                   (<= cs s)
+                                   (>= ce e))
+                            (recur (last subss)
+                                   (conj chain (-> subss count)))
+                            (conj (into [] (butlast chain))
+                                  (inc (last chain)))))]
+              (assoc-in x chain [[c s e]])))
+          [[:S 0 (count s)]]
+          parts))
+
+(structure "012345678901234567890123456789" l)
+
+;->
+;([0 30]
+; ([1 20] 
+;  ([1 5])
+;  ([6 20]
+;   (([10 15]))))
+; ([23 30]))
+
+
+
+(defn chain-extract
+  "Operates similar to extract but instead of returning a map, returns nested
+  lists. The car of each list is the capture symbol the rest of the list
+  mathes. The remaining items are matching substrings if they are strings, or
+  contained captures if they are collections."
+  [s parts]
+  (let [structured (structure s parts)] nil)
 
