@@ -350,8 +350,6 @@
      :number #{:diget '(:diget :number)}
      :bound #{\* :number}}})
 
-(def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
-
 (def fetch-fields-grammar
   {:start-symbol :S
    :prod-rules {
@@ -359,9 +357,9 @@
      :field-name+ #{'(:field-name :WSP :field-name+) :ε}
      :field-name #{"BODY" :ebody :pbody "ENVELOPE" "FLAGS" "INTERNALDATE" "UID"
                    "RFC822" "RFC822.HEADER" "RFC822.SIZE" "RFC822.TEXT"}
-     :ebody #{(-> (seq "BODY[") (list :section+ \]) (flatten))}
-     :pbody #{(-> (seq "BODY.PEEK[") (list :section+ \]) (flatten))}
-     :section+ #{'(:section :WSP :section+) :section}
+     :ebody #{(-> (seq "BODY[") (list :section* \]) (flatten))}
+     :pbody #{(-> (seq "BODY.PEEK[") (list :section* \]) (flatten))}
+     :section* #{'(:section :WSP :section*) :ε}
      :section #{"HEADER" "TEXT" "MIME" :header-fields}
      :header-fields #{(-> "HEADER.FIELDS" 
                           seq (list :WSP \( :hfield+ \)) flatten)}
@@ -479,36 +477,51 @@
   "SELECT name FROM tags
   WHERE
     name LIKE \"\\%\" AND
+    name != \"\\Inbox\" AND
     message_id = ?")
 
 (defn transmit-fmt
   "Takes a string to be transmitted in the imap style and returns it with
   the appropriate length prefix (assumes UTF-8 encoding)"
   [s]
-  (format "{%d}%s" (alength (.getBytes s "UTF-8")) s))
+  (format "{%d}\r\n%s" (alength (.getBytes s "UTF-8")) s))
                 
 
 (defn extract-sections
-  ""
+  "Haha, wouldn't you like a docstring."
   [fields message]
-  (->> (for [section (:section fields)]
-         (cond
-           (= section "HEADER")
-             (->> message
-                  (:headers)
-                  (map (fn [[k v]] (str (name k) ": " v)))
-                  (string/join "\n"))
-           (= section "TEXT")
-             (:body message)
-           (re-matches #"HEADER.FIELDS\s?\(.+\)" section)
-             (let [hfields (set (:hfield fields))]
+  (println (:section fields))
+  (if (empty? (:section fields))
+    (-> message imf/reconstitute transmit-fmt)
+    (->> (for [section (:section fields)]
+           (cond
+             (= section "HEADER")
                (->> message
                     (:headers)
-                    (filter (fn [[k v]] (contains? hfields (name k))))
                     (map (fn [[k v]] (str (name k) ": " v)))
-                    (string/join "\r\n")))))
-       (string/join "\r\n")
-       (transmit-fmt)))
+                    (string/join "\n"))
+             (= section "TEXT")
+               (:body message)
+             (re-matches #"HEADER.FIELDS\s?\(.+\)" section)
+               (let [hfields (set (map (fn [x] (.toLowerCase x)) 
+                                       (:hfield fields)))]
+                 (->> message
+                      (:headers)
+                      (filter (fn [[k v]] (contains? hfields (name k))))
+                      (map (fn [[k v]] (str (name k) ": " v)))
+                      (string/join "\r\n")))))
+         (string/join "\r\n")
+         (transmit-fmt))))
+
+(defn field-sort
+  "Comparator function for ordering fileds in a FETCH response."
+  [left right]
+  (cond
+    (= left "UID") -1 
+    (= right "UID") 1 
+    (re-matches #"^BODY(.PEEK)?\[.*\]$" left) 1
+    (re-matches #"^BODY(.PEEK)?\[.*\]$" right) -1
+    :else (compare (first left) (first right))))
 
 (defn format-record
   "Takes a database record and formats it as one 'line' to be sent over imap"
@@ -519,40 +532,46 @@
                      (common/daemon-wrap record))
         parsed (imf/parse wrapped)
         cur-num ((if UID :id :seq_num) record)]
-    (->> (for [field (:field-name fields)]
-           (cond
-             (= field "FLAGS")
-               (->> [fetch-flags-sql (:id record)]
-                    (j/query db)
-                    (map :name)
-                    (string/join " ")
-                    (format "FLAGS (%s)"))
-             (= field "UID")
-               (format "UID %d" (:id record))
-             (= field "INTERNALDATE")
-               (->> record
-                    (:recv_date)
-                    (* 1000)
-                    (Date.)
-                    (imf/fmt-date)
-                    (str "INTERNALDATE "))
-             (= field "RFC822.SIZE")
-               (->> (.getBytes wrapped "UTF-8")
-                    (alength)
-                    (format "RFC822.SIZE %d"))
-             (= field "BODY")
-               (str "BODY " (transmit-fmt wrapped))
-             (re-matches #"^BODY.PEEK\[.*\]$" field)
-               (str field " "
-                    (extract-sections fields parsed))
-             (re-matches #"^BODY\[.*\]$" field)
-               (do
-                 ; Do our database jazz here.
-                 (str field " "
-                      (extract-sections fields parsed))
-             :else
-               (throw (Throwable. "Unrecognized field name"))))
-
+    (println fields )
+    (->> (for [field (reverse (if (some (partial = "UID") (:field-name fields))
+                                (:field-name fields)
+                                (conj (:field-name fields) "UID")))]
+           [field
+            (cond
+              (= field "FLAGS")
+                (->> [fetch-flags-sql (:id record)]
+                     (j/query db)
+                     (map :name)
+                     (string/join " ")
+                     (format "FLAGS (%s)"))
+              (= field "UID")
+                (format "UID %d" (:id record))
+              (= field "INTERNALDATE")
+                (->> record
+                     (:recv_date)
+                     (* 1000)
+                     (Date.)
+                     (imf/fmt-date)
+                     (str "INTERNALDATE "))
+              (= field "RFC822.SIZE")
+                (->> (.getBytes wrapped "UTF-8")
+                     (alength)
+                     (format "RFC822.SIZE %d"))
+              (= field "BODY")
+                (str "BODY " (transmit-fmt wrapped))
+              (re-matches #"^BODY.PEEK\[.*\]$" field)
+                ; We need to reply with BODY[...] if we were peeking or not
+                (str (string/replace field  #"^BODY\.PEEK" "BODY") " "
+                     (extract-sections fields parsed))
+              (re-matches #"^BODY\[.*\]$" field)
+                (do
+                  ; Do our database jazz here.
+                  (str field " "
+                       (extract-sections fields parsed)))
+              :else
+                (throw (Throwable. "Unrecognized field name")))])
+         (sort-by first field-sort)
+         (map second)
          (string/join " ")
          (format "%d FETCH (%s)" cur-num))))
 

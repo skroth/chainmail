@@ -351,7 +351,8 @@
   (string/join "\r\n" (conj
     (vec (for [[k v] headers]
       (str
-        (string/replace (name k) #":" "(colon)")
+        ;;(string/replace (name k) #":" "(colon)")
+        (name k)
         ": "
         (string/replace v #":" "(colon)"))))
     "" ; Create a double new line between headers and content
@@ -370,7 +371,7 @@
                  :From (str "Chainmail Mailer Daemon <" tutivillus ">")
                  :MIME-Version "1.0"
                  :Subject "Forwarded Ciphertext Contained Within"
-                 :To new-to-address
+                 :To (str "You <" new-to-address ">")
                  :User-Agent "Chainmail/Daemon"}
         body (str "Below is an encrypted message. No further information is "
                   "available until the message has been decrypted. To do so "

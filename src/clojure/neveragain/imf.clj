@@ -71,3 +71,12 @@
       {:headers (into {} (map (partial kv-split #"\s*:\s*") 
                               header-lines))
        :body (string/join "\r\n" body-lines)})))
+
+(defn reconstitute
+  "Inverse of parse, takes a parsed 2822 message and returns its string 
+  representation."
+  [parsed]
+  (str (map (fn [[k v]] (str (name k) ": " v))
+            (:headers parsed))
+       "\r\n\r\n"
+       (:body parsed)))
