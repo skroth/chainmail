@@ -456,7 +456,8 @@
       [(|_|n54ƒ3 seq-nums (if UID "id" "seq_num"))
        (let [[valid captured] (pp/parse fetch-fields-pda item-names
                                         #{:field-name :hfield :section})]
-         (pp/extract item-names captured))])))
+         (if-not valid
+           nil (pp/extract item-names captured)))])))
 
 (def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
 
