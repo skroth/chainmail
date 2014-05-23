@@ -26,6 +26,17 @@
     (is (= (first (:local-part extracted)) "lan.rogers.book"))
     (is (= (first (:domain extracted))) "gmail.com")))
 
+(deftest test-chain-extract
+  (let [address "lan.rogers.book@gmail.com" 
+        result (pp/parse (pp/cfg-to-ndpda addresses/addr-spec-grammar)
+                         address
+                         #{:local-part :domain})
+        extracted (pp/chain-extract address (last result))]
+    ; Could do with a bit more rigerious testing
+    (is result)
+    (is (seq? extracted))
+    (is (= (count (first extracted)) 2))))
+
 (deftest test-cfg-to-ndpda
   (let [pda (pp/cfg-to-ndpda pp/ab-balanced-cfg)]
     (is (pp/accepts? pda "aabb"))

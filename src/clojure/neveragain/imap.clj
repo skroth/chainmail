@@ -322,9 +322,9 @@
      nil)))
 
 (def fetch-macros
-  {"ALL" #{:FLAGS :INTERNALDATE :RFC822.SIZE :ENVELOPE}
-   "FAST" #{:FLAGS :INTERNALDATE :RFC822.SIZE}
-   "FULL" #{:FLAGS :INTERNALDATE :RFC822.SIZE :ENVELOPE :BODY}})
+  {"ALL"  #{"FLAGS" "INTERNALDATE" "RFC822.SIZE" "ENVELOPE"}
+   "FAST" #{"FLAGS" "INTERNALDATE" "RFC822.SIZE"}
+   "FULL" #{"FLAGS" "INTERNALDATE" "RFC822.SIZE" "ENVELOPE" "BODY"}})
 
 (defn inclusive-range 
   "Like builtin range but is inclusive on both sides."
@@ -454,16 +454,12 @@
     (if other 
       nil ; Args list is too long, something is wrong
       [(|_|n54ƒ3 seq-nums (if UID "id" "seq_num"))
-       (let [[valid captured] (pp/parse fetch-fields-pda item-names
-                                        #{:field-name :hfield :section})]
-         (if-not valid
-           nil (pp/extract item-names captured)))])))
-
-(def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
-
-;(def long-args "1 (INTERNALDATE UID )")
-
-;(clojure.pprint/pprint (parse-fetch-args long-args))
+       (if (contains? fetch-macros item-names)
+         {:field-name (get fetch-macros item-names)}
+         (let [[valid captured] (pp/parse fetch-fields-pda item-names
+                                          #{:field-name :hfield :section})]
+           (if-not valid
+             nil (pp/extract item-names captured))))])))
 
 (def fetch-query
   "SELECT * FROM messages 
@@ -478,7 +474,6 @@
   "SELECT name FROM tags
   WHERE
     name LIKE \"\\%\" AND
-    name != \"\\Inbox\" AND
     message_id = ?")
 
 (defn transmit-fmt
@@ -489,9 +484,10 @@
                 
 
 (defn extract-sections
-  "Haha, wouldn't you like a docstring."
+  "Takes a parsed fetch field designator and an IMF message and returns the
+  specified parts of the message. Nil or an empty field collection is 
+  intrepreted as the whole IMF message."
   [fields message]
-  (println (:section fields))
   (if (empty? (:section fields))
     (-> message imf/reconstitute transmit-fmt)
     (->> (for [section (:section fields)]
@@ -510,7 +506,9 @@
                       (:headers)
                       (filter (fn [[k v]] (contains? hfields (name k))))
                       (map (fn [[k v]] (str (name k) ": " v)))
-                      (string/join "\r\n")))))
+                      (string/join "\r\n")))
+             :else
+               (throw (Throwable. "Unrecognized field name"))))
          (string/join "\r\n")
          (transmit-fmt))))
 
@@ -525,7 +523,8 @@
     :else (compare (first left) (first right))))
 
 (defn format-record
-  "Takes a database record and formats it as one 'line' to be sent over imap"
+  "Takes a database record and formats it as one 'line' to be sent over imap.
+  Beware that we may end up changing DB state based on what fields are present."
   [record fields session db UID]
   (let [wrapped (->> session
                      (:user)
@@ -533,10 +532,11 @@
                      (common/daemon-wrap record))
         parsed (imf/parse wrapped)
         cur-num ((if UID :id :seq_num) record)]
-    (println fields )
+    ; UID is implicitly a field in every FETCH command, add it if need be
     (->> (for [field (reverse (if (some (partial = "UID") (:field-name fields))
                                 (:field-name fields)
                                 (conj (:field-name fields) "UID")))]
+           ; Keep the field with the value so we can sort them later.
            [field
             (cond
               (= field "FLAGS")
@@ -572,7 +572,7 @@
               :else
                 (throw (Throwable. "Unrecognized field name")))])
          (sort-by first field-sort)
-         (map second)
+         (map second) ; Remember they're will 2-tuples
          (string/join " ")
          (format "%d FETCH (%s)" cur-num))))
 

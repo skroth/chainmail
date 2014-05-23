@@ -24,39 +24,29 @@
 
 (use-fixtures :once standard-fixture)
 
-(def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
+;(def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
 
-(last (imap/parse-fetch-args long-args))
-
-(def long-fields #{
-  '(:INTERNALDATE) 
-  '(:UID)
-  '(:RFC822.SIZE) 
-  '(:FLAGS) 
-  '(:BODY.PEAK '(:HEADER.FIELDS '(:date :subject :from :to :cc :message-id
-                                  :in-reply-to :refrences :x-priority 
-                                  :x-uniform-type-identifier :received-spf 
-                                  :x-spam-status :x-span-flag)))})
+;(time (clojure.pprint/pprint (last (parse-fetch-args long-args))))
 
 (deftest test-imap-parse-fetch-args
   (loop [[[s [nums fields]] & remaining]
-         [["5 FLAGS" ["seq_num = 5" #{:FLAGS}]] 
-          ["42 (FLAGS ENVELOPE)" ["seq_num = 42" #{:FLAGS :ENVELOPE}]]
-          ["42 ALL" ["seq_num = 42" #{:FLAGS :INTERNALDATE 
-                                      :RFC822.SIZE :ENVELOPE}]]
-          ["(1,2,3) (FLAGS)" ["seq_num IN (3, 2, 1)" #{:FLAGS}]]
+         [["5 FLAGS" ["seq_num = 5" #{"FLAGS"}]] 
+          ["42 (FLAGS ENVELOPE)" ["seq_num = 42" #{"FLAGS" "ENVELOPE"}]]
+          ["42 ALL" ["seq_num = 42" #{"FLAGS" "INTERNALDATE" 
+                                      "RFC822.SIZE" "ENVELOPE"}]]
+          ["(1,2,3) (FLAGS)" ["seq_num IN (3, 2, 1)" #{"FLAGS"}]]
           ["9:11 FAST" ["seq_num >= 9 AND seq_num <= 11" 
-                          #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
+                          #{"FLAGS" "INTERNALDATE" "RFC822.SIZE"}]]
           ["11:9 FAST" ["seq_num >= 11 AND seq_num <= 9"
-                          #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
-          ["2a FAST" [nil #{:FLAGS :INTERNALDATE :RFC822.SIZE}]]
+                          #{"FLAGS" "INTERNALDATE" "RFC822.SIZE"}]]
+          ["2a FAST" [nil #{"FLAGS" "INTERNALDATE" "RFC822.SIZE"}]]
           ["(1,2) SLOW" ["seq_num IN (2, 1)" nil]]
-          ["1:2* FLAGS" [nil #{:FLAGS}]]
-          ["1:* FLAGS" ["seq_num >= 1" #{:FLAGS}]]
-          [long-args ["set_num = 1" long-fields]]]]
+          ["1:2* FLAGS" [nil #{"FLAGS"}]]
+          ["1:* FLAGS" ["seq_num >= 1" #{"FLAGS"}]]]]
     (let [[r-nums r-fields] (imap/parse-fetch-args s)]
       (is (= r-nums nums))
-      (is (= r-fields fields))
+      (if r-fields
+        (is (= fields (-> r-fields :field-name set))))
       (if (not (empty? remaining)) (recur remaining)))))
 
 (deftest test-imap-noop
@@ -206,11 +196,12 @@
     (is (= 2 (count (:response case-one))))
     (is (< 1 (count (:response case-three))))
     ; Forive the ID regex, but we want this to work regardless of TZ.
-    (is (re-matches #"^1 FETCH \(FLAGS \((\\Recent \\Inbox)\) UID \d+ INTERNALDATE (Wed|Thu), (31|01) (Dec|Jan) 19[67][90] \d{2}:\d{2}:\d{2} [+-]\d{4}\).*"
+    (is (re-matches #"^1 FETCH \(UID \d+ FLAGS \((\\Recent \\Inbox)\) INTERNALDATE (Wed|Thu), (31|01) (Dec|Jan) 19[67][90] \d{2}:\d{2}:\d{2} [+-]\d{4}\).*"
                     (-> case-three :response first)))
-    (let [[_ size message] (re-matches #"(?s)^\d+ FETCH \(BODY \{(\d+)\}(.+)\)$"
+    (let [[_ size message] (re-matches 
+                             #"(?sm)^\d+ FETCH \(UID \d+ BODY \{(\d+)\}(.+)\)$"
                                        (-> case-one :response first))]
-      (is (= (Integer/parseInt size) 
+      (is (= (+ 2 (Integer/parseInt size)) ; Compensate for the CRLF
              (alength (.getBytes message "UTF-8")))))))
 
 (deftest test-uid-fetch

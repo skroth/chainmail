@@ -278,7 +278,7 @@
   sets of substrings identified in parts as having that name. Used with the
   second value in the output of `parse`. If optional argument `singles` is 
   true, will assume only one instance of each capture will appear and will
-  return a map of string rather than lsit values."
+  return a map of string rather than list values."
   [s parts &{:keys [singles]
               :or  {singles false}}]
   (let [len (count s)]
@@ -298,33 +298,30 @@
              [:d 10 15]
              [:e 23 30]))
 
+(def l (list [:local-part 25 10]
+             [:domain 9 0]))
+
 (defn structure
   [s parts]
   (reduce (fn [x [c s e]]
             (let [chain (loop [[[cc cs ce] & subss] x
                                chain []]
                           (if (and cc cs ce
-                                   (<= cs s)
-                                   (>= ce e))
+                                   (>= cs s)
+                                   (<= ce e))
                             (recur (last subss)
                                    (conj chain (-> subss count)))
                             (conj (into [] (butlast chain))
                                   (inc (last chain)))))]
               (assoc-in x chain [[c s e]])))
-          [[:S 0 (count s)]]
+          [[:S (count s) 0]]
           parts))
 
-(structure "012345678901234567890123456789" l)
-
-;->
-;([0 30]
-; ([1 20] 
-;  ([1 5])
-;  ([6 20]
-;   (([10 15]))))
-; ([23 30]))
-
-
+(defn simps [s t]
+  (let [[[cap start end] & r] t
+        len (count s)
+        head (subs s (- len start) (- len end))]
+    (conj (map (partial simps s) r) [cap head])))
 
 (defn chain-extract
   "Operates similar to extract but instead of returning a map, returns nested
@@ -332,5 +329,7 @@
   mathes. The remaining items are matching substrings if they are strings, or
   contained captures if they are collections."
   [s parts]
-  (let [structured (structure s parts)] nil)
+  (let [structured (structure s parts)
+        extracted (simps s structured)]
+    extracted))
 
