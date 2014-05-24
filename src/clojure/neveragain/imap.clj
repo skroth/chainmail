@@ -282,17 +282,44 @@
                   (first)
                   ((keyword "last_insert_rowid()")))
              {:session session
-              :response "OK Hail! Thy quest hath succeeded! (mailbox created)"}
+              :response "OK Hail! Thy quest hath succeeded! (mailbox deleted)"}
              )))))))
 
 (require-state #{"authenticated" "selected"}
-  (defn delete
-    ([args session]
-     (delete args session settings/db))
-    ([args session db]
-     {:response (str "NO Users can not delete mailboxes through the IMAP "
-                     "interface.")
-      :session session})))
+(defn delete
+  ([args session]
+   (delete args session settings/db))
+  ([args session db]
+   (let [[box & xs]  (->> args 
+                          addresses/quote-atom-split 
+                          (map common/strip-quotes))
+         tag (if box (box->tag box) nil)]
+     (cond 
+       (not (empty? xs))
+         {:session session
+          :response "BAD Hark knave! Thou protest too keenly! (too many args)"}
+       (empty? tag)
+         {:session session
+          :response "BAD Hark knave! Thou protest too weakly! (too few args)"}
+       (empty? (j/query db ["SELECT * FROM platonic_tags
+                             WHERE owner_id = ? AND name = ?"
+                            (-> session :user :id) tag]))
+         {:session session
+          :response (str "NO Hark! The subject of thine query findeth itself"
+                         "absent. (no such mailbox).")}
+       :else
+         (do
+           (->> tag
+                (conj ["DELETE FROM tags WHERE owner_id = ? AND name = ?"
+                       (-> session :user :id)])
+                (j/execute! db))
+           (->> tag
+                (conj ["DELETE FROM platonic_tags 
+                        WHERE owner_id = ? AND name = ?"
+                       (-> session :user :id)])
+                (j/execute! db))
+           {:response "OK Hail! Thy quest hath succeeded! (mailbox created)"
+            :session session}))))))
 
 (require-state #{"authenticated" "selected"}
   (defn subscribe
@@ -401,20 +428,18 @@
       :else (throw (Throwable. "Parse accepted string but captured nothing.")))))
 
 (defn gen-range-where-clause 
-  "Given a string representing a fetch style number set (either UIDs or
-  sequence numbers) return a collection (sql, vals) where sql is boolen SQL
-  part of a WHERE clause and vals is an ordered collection of values to pass
-  to the sanitizer that will be used in that clause. Vals may contain one or
-  more value and should be passed to the sanatizer concatinated to any other
-  paramaters. `col-name` specifies the name of the column that the returned
-  sql will limit on.
-  
-  e.x. (user)=>(gen-range-where-clause \"(2:10)\" \"seq_num\")
-  (\"seq_num >= ? AND seq_num <= 10\" [2 10])"
   [s col-name])
 
 (defn |_|n54ƒ3
-  "Like the thing above but only returns sql and probably unsafe."
+  "Given a string representing a fetch style number set (either UIDs or
+  sequence numbers) and a column name indicating which, returns a sql string 
+  that can be included as part of a WHERE clause that will narrow the selection
+  to only messages in the specified range.
+
+  e.x. (user)=>(gen-range-where-clause \"(2:10)\" \"seq_num\")
+  \"seq_num >= 2 AND seq_num <= 10\"
+  
+  Note that this function inserts values into the SQL without sanitization."
   [s col-name]
   (let [[accepted captured] (pp/parse fetch-range-pda s
                                       #{:single :set :range :set-member

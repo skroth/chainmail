@@ -146,11 +146,17 @@
 
 (deftest test-imap-delete
   (let [user (common/get-user-record "lanny@neveraga.in" test-db)
-        case-one (imap/delete "" {} test-db)
-        case-two (imap/delete "" {:state "authenticated" :user user} test-db)]
+        _ (imap/create "\"Newsletters\""
+                       {:state "authenticated" :user user} test-db)
+        case-one (imap/delete "\"Newsletters\"" {} test-db)
+        case-two (imap/delete "\"Squids\"" 
+                              {:state "authenticated" :user user} test-db)
+        case-three (imap/delete "\"Newsletters\"" 
+                                {:state "authenticated" :user user} test-db)]
     (is (= (:session case-one) {}))
     (is (re-matches #"^BAD.*" (:response case-one)))
-    (is (re-matches #"^NO.*" (:response case-two)))))
+    (is (re-matches #"^NO.*" (:response case-two)))
+    (is (re-matches #"^OK.*" (:response case-three)))))
 
 (deftest test-imap-subscribe
   (let [user (common/get-user-record "lanny@neveraga.in" test-db)
