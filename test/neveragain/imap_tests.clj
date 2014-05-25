@@ -17,8 +17,8 @@
      PRAGMA writable_schema = 0;
      VACUUM;")
 
-  (j/db-do-commands test-db [(slurp "test/neveragain/testdata.sql")])
   (j/db-do-commands test-db [(slurp "src/clojure/neveragain/schema.sql")])
+  (j/db-do-commands test-db [(slurp "test/neveragain/testdata.sql")])
 
   (f))
 
@@ -157,6 +157,39 @@
     (is (re-matches #"^BAD.*" (:response case-one)))
     (is (re-matches #"^NO.*" (:response case-two)))
     (is (re-matches #"^OK.*" (:response case-three)))))
+
+(deftest test-imap-rename
+  (j/with-db-transaction [tdb test-db]
+    (let [user (common/get-user-record "lanny@neveraga.in" tdb)
+          sess {:state "authenticated" :user user}
+          _ (imap/create "\"Newsletters\"" sess tdb)
+          _ (imap/create "\"Salmon\"" sess tdb)
+          ; No auth -> BAD
+          case-one (imap/rename "\"Newsletters\" \"Timesinks\"" {} tdb)
+          ; One box name when we expect two -> BAD
+          case-two (imap/rename "\"Newsletters\"" sess tdb)
+          ; Trying to rename a non-existent box -> NO
+          case-three (imap/rename "\"Squids\" \"Octopi\"" sess tdb)
+          ; Target name already exists -> NO
+          case-four (imap/rename "\"Salmon\" \"Timesinks\"" sess tdb)
+          ; All good -> OK
+          case-five (imap/rename "\"Newsletters\" \"Timesinks\"" sess tdb)
+          ; `Newsletters` doesn't exist anymore -> NO
+          case-six (imap/rename "\"Newsletters\" \"Timesinks\"" sess tdb)
+          ; Special case, move inbox messages to new box -> OK
+          case-seven (imap/rename "\"INBOX\" \"Squids\"" sess tdb)
+          ; Special case, move inbox messages to existing box -> OK
+          case-eight (imap/rename "\"INBOX\" \"Salmon\"" sess tdb)]
+    (is (re-matches #"^BAD.*" (:response case-one)))
+    (is (re-matches #"^BAD" (:response case-two)))
+    (is (re-matches #"^NO.*" (:response case-three)))
+    (is (re-matches #"^NO.*" (:response case-four)))
+    (is (re-matches #"^OK.*" (:response case-five)))
+    (is (re-matches #"^NO.*" (:response case-six)))
+    (is (re-matches #"^OK.*" (:response case-seven)))
+    (is (re-matches #"^OK.*" (:response case-eight)))
+
+    (j/db-set-rollback-only! tdb))))
 
 (deftest test-imap-subscribe
   (let [user (common/get-user-record "lanny@neveraga.in" test-db)

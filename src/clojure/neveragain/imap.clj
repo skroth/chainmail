@@ -38,8 +38,8 @@
 
 (defmacro require-state 
   "Wraps a pure verb handler to prevent the handler from being executed if 
-  `(:state session)`, as per the handlers's binding, is not equal in the 
-  `ok-states` hash set."
+  `(:state session)`, as per the handlers's binding, is not in the `ok-states` 
+  hash set."
   [ok-states exp]
   (let [[dsym fname [func & airities]] (macroexpand exp)
         session-sym 'session]
@@ -320,6 +320,15 @@
                 (j/execute! db))
            {:response "OK Hail! Thy quest hath succeeded! (mailbox created)"
             :session session}))))))
+
+(require-state #{"authenticated" "selected"}
+(defn rename
+  ([args session]
+   (rename args session settings/db))
+  ([args session db]
+   {:session session
+    :response "NOT IMPLEMENTED"})))
+ 
 
 (require-state #{"authenticated" "selected"}
   (defn subscribe
