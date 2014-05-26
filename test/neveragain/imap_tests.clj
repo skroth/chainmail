@@ -171,7 +171,7 @@
           ; Trying to rename a non-existent box -> NO
           case-three (imap/rename "\"Squids\" \"Octopi\"" sess tdb)
           ; Target name already exists -> NO
-          case-four (imap/rename "\"Salmon\" \"Timesinks\"" sess tdb)
+          case-four (imap/rename "\"Salmon\" \"Newsletters\"" sess tdb)
           ; All good -> OK
           case-five (imap/rename "\"Newsletters\" \"Timesinks\"" sess tdb)
           ; `Newsletters` doesn't exist anymore -> NO
@@ -181,7 +181,7 @@
           ; Special case, move inbox messages to existing box -> OK
           case-eight (imap/rename "\"INBOX\" \"Salmon\"" sess tdb)]
     (is (re-matches #"^BAD.*" (:response case-one)))
-    (is (re-matches #"^BAD" (:response case-two)))
+    (is (re-matches #"^BAD.*" (:response case-two)))
     (is (re-matches #"^NO.*" (:response case-three)))
     (is (re-matches #"^NO.*" (:response case-four)))
     (is (re-matches #"^OK.*" (:response case-five)))

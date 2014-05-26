@@ -1,8 +1,10 @@
 CREATE TABLE users
 ( id INTEGER PRIMARY KEY,
   realname TEXT,
-  address TEXT, -- normalized, must be unique with hostname, what we show to users and stick on outbound email
-  box_name TEXT, -- A local part of an address that must normalize to the `address` in the same row
+  address TEXT,  -- normalized, must be unique with hostname, what we show 
+                 -- to users and stick on outbound email
+  box_name TEXT, -- A local part of an address that must normalize to the 
+                 --`address` in the same row
   hostname TEXT,
   elgamal_pub_key TEXT,
   hashword TEXT,
@@ -88,6 +90,3 @@ CREATE TRIGGER dec_seq_nums AFTER DELETE ON messages
         recipient_id = old.recipient_id AND
 	seq_num > old.seq_num;
   END;
-
-    
-

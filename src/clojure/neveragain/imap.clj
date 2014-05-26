@@ -17,6 +17,11 @@
     (java.io File)
     (org.mindrot.jbcrypt BCrypt)))
 
+(def LOID 
+  "Convenience constant because :last_insert_rowid() isn't a valid keyword
+  literal."
+  (keyword "last_insert_rowid()"))
+
 (defn pnr [x] (println x) x)
 
 (defn wrap-pure-imap-verb [func]
@@ -75,6 +80,7 @@
       (= norm "MB-INBOX") "\\Inbox"
       (= norm "MB-*") "*"
       (= norm "MB-%") "*"
+      (= norm "MB-") ""
       :else norm)))
 
 (defn tag->box
@@ -253,6 +259,17 @@
    (select args (assoc session :read-only true) db))))
 
 
+(defn tag-exists?
+  "Returns true if there exists a platonic tag `name` belonging to `user`."
+  [tag user db]
+  (->> [tag (:id user)]
+       (cons "SELECT COUNT(*) as count FROM platonic_tags 
+              WHERE name=? AND owner_id=?")
+       (j/query db)
+       (first)
+       (:count)
+       (pos?)))
+
 (require-state #{"authenticated" "selected"}
 (defn create
   ([args session]
@@ -260,7 +277,9 @@
   ([args session db]
    (let [[tag & xs]  (->> args 
                           addresses/quote-atom-split 
-                          (map common/strip-quotes)) ]
+                          (map common/strip-quotes)
+                          (filter identity)
+                          (map box->tag))]
      (cond 
        (not (empty? xs))
          {:session session
@@ -268,22 +287,19 @@
        (empty? tag)
          {:session session
           :response "BAD Hark knave! Thou protest too weakly! (too few args)"}
+       (tag-exists? tag (:user session) db)
+         {:session session
+          :response (str "NO Hark knave! Thou shalt not usurp that title! "
+                         "(mailbox name already exists)")}
        :else
-         (if (first (j/query db ["SELECT * FROM platonic_tags
-                                 WHERE name=? AND owner_id=?"
-                                 (box->tag tag)
-                                 (-> session :user :id)]))
+         (do
+           (->> {:name tag :owner_id (-> session :user :id)}
+                (j/insert! db :platonic_tags)
+                (first)
+                (LOID))
            {:session session
-            :response (str "NO Hark knave! Thou shalt not usurp that title! "
-                           "(mailbox name already exists)")}
-           (do
-             (->> {:name (box->tag tag) :owner_id (-> session :user :id)}
-                  (j/insert! db :platonic_tags)
-                  (first)
-                  ((keyword "last_insert_rowid()")))
-             {:session session
-              :response "OK Hail! Thy quest hath succeeded! (mailbox deleted)"}
-             )))))))
+            :response "OK Hail! Thy quest hath succeeded! (mailbox deleted)"}
+           ))))))
 
 (require-state #{"authenticated" "selected"}
 (defn delete
@@ -301,11 +317,9 @@
        (empty? tag)
          {:session session
           :response "BAD Hark knave! Thou protest too weakly! (too few args)"}
-       (empty? (j/query db ["SELECT * FROM platonic_tags
-                             WHERE owner_id = ? AND name = ?"
-                            (-> session :user :id) tag]))
+       (not (tag-exists? tag (:user session) db))
          {:session session
-          :response (str "NO Hark! The subject of thine query findeth itself"
+          :response (str "NO Hark! The subject of thine query findeth itself "
                          "absent. (no such mailbox).")}
        :else
          (do
@@ -326,9 +340,44 @@
   ([args session]
    (rename args session settings/db))
   ([args session db]
-   {:session session
-    :response "NOT IMPLEMENTED"})))
- 
+   (let [[source target & xs]  (->> args 
+                                    addresses/quote-atom-split 
+                                    (filter identity)
+                                    (map common/strip-quotes)
+                                    (map box->tag))
+         user (:user session)]
+     (cond
+       (not (and source target))
+         {:response "BAD Hark knave! Thou protest too weakly! (too few args)"
+          :session session}
+       (seq xs)
+         {:response "BAD Hark knave! Thou protest too keenly! (too many args)"
+          :session session}
+       (not (tag-exists? source user db))
+         {:response (str "NO Hark knave! Surely you jest, 'tis no kingdom I "
+                         "have ever heard of. (rename source already exists)")
+          :session session}
+       (= source "\\Inbox")
+         ; Special behaviour for inbox source per the spec, we move everything
+         ; from there into the target, creating it if need be.
+         (do
+           (j/insert! db :platonic_tags {:name target :owner_id (:id user)})
+           (j/execute! db ["UPDATE tags SET name=? WHERE name=?" target source])
+           {:response "OK Hail! Thy quest hath succeeded! (mailbox renamed)"
+            :session session})
+       ; In the case of inbox moving we actually can move to an existent
+       ; target, so do this until after we know this isn't that case.
+       (tag-exists? target user db)
+         {:response (str "NO Hark knave! Another lord hath laid claim here! "
+                         "(rename target already exists)")
+          :session session}
+       :else
+         (do
+           (j/execute! db ["UPDATE platonic_tags SET name=? WHERE name=?" 
+                           target source])
+           (j/execute! db ["UPDATE tags SET name=? WHERE name=?" target source])
+           {:response "OK Hail! Thy quest hath succeeded! (mailbox renamed)"
+            :session session}))))))
 
 (require-state #{"authenticated" "selected"}
   (defn subscribe
