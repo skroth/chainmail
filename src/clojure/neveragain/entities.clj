@@ -5,7 +5,6 @@
     (clojure [string :as string])
     (neveragain [settings :as settings])))
 
-(println settings/db)
 (defdb korma-db settings/db)
 (declare users forwarding_directives platonic_tags tags)
 

@@ -68,7 +68,7 @@
   the user holding that mailbox."
   [address]
   (let [parsed (addresses/parse-address address)]
-    (-> (k/select e/users)
+    (-> (k/select* e/users)
         (k/where {:address (:norm-box-name parsed)
                   :hostname (:domain parsed)})
         (k/limit 1)

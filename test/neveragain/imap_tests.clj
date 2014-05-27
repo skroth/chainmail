@@ -1,53 +1,32 @@
 (ns neveragain.imap-tests
+  (:use [clojure.java.shell :only [sh]])
   (:require
     (clojure [test :refer :all])
     (clojure.java [jdbc :as j])
+    (korma [core :as k]
+           [db :as korma.db])
     (neveragain [common :as common]
+                [entities :as e]
                 [imap :as imap])))
       
+
 (defn standard-fixture [f]
-  (def test-db {
-    :classname "org.sqlite.JDBC"
-    :subprotocol "sqlite"
-    :subname "test.db"})
+  (sh "sh" "rebuild_db.sh" "test.db")
 
-  (j/db-do-commands test-db
-    "PRAGMA writable_schema = 1;
-     delete from sqlite_master where type = 'table';
-     PRAGMA writable_schema = 0;
-     VACUUM;")
+  (let [test-db (korma.db/create-db {:classname "org.sqlite.JDBC"
+                                     :subprotocol "sqlite"
+                                     :subname "test.db"})]
+    (korma.db/default-connection test-db)
+    (korma.db/with-db test-db (f))))
 
-  (j/db-do-commands test-db [(slurp "src/clojure/neveragain/schema.sql")])
-  (j/db-do-commands test-db [(slurp "test/neveragain/testdata.sql")])
-
-  (f))
+(defn transact-fixture [f]
+  (korma.db/transaction
+    (do
+      (f)
+      (korma.db/rollback))))
 
 (use-fixtures :once standard-fixture)
-
-;(def long-args "1 (INTERNALDATE UID RFC822.SIZE FLAGS BODY.PEEK[HEADER.FIELDS (date subject from to cc message-id in-reply-to references x-priority x-uniform-type-identifier x-universally-unique-identifier received-spf x-spam-status x-spam-flag)])")
-
-;(time (clojure.pprint/pprint (last (parse-fetch-args long-args))))
-
-(deftest test-imap-parse-fetch-args
-  (loop [[[s [nums fields]] & remaining]
-         [["5 FLAGS" ["seq_num = 5" #{"FLAGS"}]] 
-          ["42 (FLAGS ENVELOPE)" ["seq_num = 42" #{"FLAGS" "ENVELOPE"}]]
-          ["42 ALL" ["seq_num = 42" #{"FLAGS" "INTERNALDATE" 
-                                      "RFC822.SIZE" "ENVELOPE"}]]
-          ["(1,2,3) (FLAGS)" ["seq_num IN (3, 2, 1)" #{"FLAGS"}]]
-          ["9:11 FAST" ["seq_num >= 9 AND seq_num <= 11" 
-                          #{"FLAGS" "INTERNALDATE" "RFC822.SIZE"}]]
-          ["11:9 FAST" ["seq_num >= 11 AND seq_num <= 9"
-                          #{"FLAGS" "INTERNALDATE" "RFC822.SIZE"}]]
-          ["2a FAST" [nil #{"FLAGS" "INTERNALDATE" "RFC822.SIZE"}]]
-          ["(1,2) SLOW" ["seq_num IN (2, 1)" nil]]
-          ["1:2* FLAGS" [nil #{"FLAGS"}]]
-          ["1:* FLAGS" ["seq_num >= 1" #{"FLAGS"}]]]]
-    (let [[r-nums r-fields] (imap/parse-fetch-args s)]
-      (is (= r-nums nums))
-      (if r-fields
-        (is (= fields (-> r-fields :field-name set))))
-      (if (not (empty? remaining)) (recur remaining)))))
+;(use-fixtures :each transact-fixture)
 
 (deftest test-imap-noop
   (let [session {:dummy-key false}
@@ -72,11 +51,11 @@
 
 (deftest test-imap-login
   (let [session {}
-        res-zero (imap/login "singlearg" session test-db)
-        res-one (imap/login "jimmy@gmail.com password" session test-db)
-        res-two (imap/login "lanny@neveraga.in password" session test-db)
+        res-zero (imap/login "singlearg" session nil)
+        res-one (imap/login "jimmy@gmail.com password" session nil)
+        res-two (imap/login "lanny@neveraga.in password" session nil)
         res-three (imap/login "lanny@neveraga.in passthesaltpls" 
-                              session test-db)]
+                              session nil)]
     (is (= (:session res-zero) session))
     (is (re-matches #"^BAD.*" (:response res-zero)))
 
@@ -90,16 +69,16 @@
     (is (:user (:session res-three)))))
 
 (deftest test-imap-select
-  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+  (let [user (common/get-user-record "lanny@neveraga.in")
         case-one (imap/select "INBOX" 
                               {:user user :state "authenticated"}
-                              test-db)
+                              nil)
         case-two (imap/select "INBOX" 
                               {:user  nil :state nil}
-                              test-db)
+                              nil)
         case-three (imap/select "squids" 
                               {:user user :state "authenticated"}
-                              test-db)]
+                              nil)]
     (is (sequential? (:response case-one)))
     (is (some (fn [x] (re-matches #"\d+ EXISTS" x)) 
               (:response case-one)))
@@ -113,73 +92,69 @@
     (is (re-matches #"^NO.*" (:response case-three)))))
 
 (deftest test-imap-examine
-  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+  (let [user (common/get-user-record "lanny@neveraga.in")
         case-one (imap/examine "INBOX" 
                                {:user user :state "authenticated"}
-                               test-db)]
+                               nil)]
     (is (= (-> case-one :session :state) "selected"))
     (is (= (-> case-one :session :read-only) true))
     (is (some (fn [x] (re-matches #"\d+ RECENT" x)) 
               (:response case-one)))))
 
-
-;(j/db-transaction*)
 (deftest test-imap-create
-  (j/with-db-transaction [tdb test-db]
-    (let [user (common/get-user-record "lanny@neveraga.in" tdb)
-          case-one (imap/create "" {} tdb)
-          case-two (imap/create "" {:state "authenticated" :user user} tdb)
-          case-three (imap/create "Breath This Air" 
-                                  {:state "authenticated" :user user} tdb)
-          case-four (imap/create "\"Trash\"" 
-                                 {:state "authenticated" :user user} tdb)
-          case-five (imap/create "Trash" 
-                                 {:state "authenticated" :user user} tdb)]
-      (is (= (:session case-one) {}))
-      (is (re-matches #"^BAD.*" (:response case-one)))
-      (is (re-matches #"^BAD.*" (:response case-two)))
-      (is (re-matches #"^BAD.*" (:response case-three)))
-      (is (re-matches #"^OK.*" (:response case-four)))
-      (is (re-matches #"^NO.*" (:response case-five)))
+  (let [user (common/get-user-record "lanny@neveraga.in")
+        case-one (imap/create "" {} nil)
+        case-two (imap/create "" {:state "authenticated" :user user} nil)
+        case-three (imap/create "Breath This Air" 
+                                {:state "authenticated" :user user} nil)
+        case-four (imap/create "\"Trash\"" 
+                               {:state "authenticated" :user user} nil)
+        case-five (imap/create "Trash" 
+                               {:state "authenticated" :user user} nil)]
+    (is (= (:session case-one) {}))
+    (is (re-matches #"^BAD.*" (:response case-one)))
+    (is (re-matches #"^BAD.*" (:response case-two)))
+    (is (re-matches #"^BAD.*" (:response case-three)))
+    (is (re-matches #"^OK.*" (:response case-four)))
+    (is (re-matches #"^NO.*" (:response case-five)))))
 
-      (j/db-set-rollback-only! tdb))))
+;(standard-fixture test-imap-create)
 
 (deftest test-imap-delete
-  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+  (let [user (common/get-user-record "lanny@neveraga.in")
         _ (imap/create "\"Newsletters\""
-                       {:state "authenticated" :user user} test-db)
-        case-one (imap/delete "\"Newsletters\"" {} test-db)
+                       {:state "authenticated" :user user} nil)
+        case-one (imap/delete "\"Newsletters\"" {} nil)
         case-two (imap/delete "\"Squids\"" 
-                              {:state "authenticated" :user user} test-db)
+                              {:state "authenticated" :user user} nil)
         case-three (imap/delete "\"Newsletters\"" 
-                                {:state "authenticated" :user user} test-db)]
+                                {:state "authenticated" :user user} nil)]
     (is (= (:session case-one) {}))
     (is (re-matches #"^BAD.*" (:response case-one)))
     (is (re-matches #"^NO.*" (:response case-two)))
     (is (re-matches #"^OK.*" (:response case-three)))))
 
 (deftest test-imap-rename
-  (j/with-db-transaction [tdb test-db]
-    (let [user (common/get-user-record "lanny@neveraga.in" tdb)
+    (let [user (common/get-user-record "lanny@neveraga.in")
           sess {:state "authenticated" :user user}
-          _ (imap/create "\"Newsletters\"" sess tdb)
-          _ (imap/create "\"Salmon\"" sess tdb)
+          _ (imap/create "\"Newsletters\"" sess nil)
+          _ (imap/create "\"Salmon\"" sess nil)
           ; No auth -> BAD
-          case-one (imap/rename "\"Newsletters\" \"Timesinks\"" {} tdb)
+          case-one (imap/rename "\"Newsletters\" \"Timesinks\"" {} nil)
           ; One box name when we expect two -> BAD
-          case-two (imap/rename "\"Newsletters\"" sess tdb)
+          case-two (imap/rename "\"Newsletters\"" sess nil)
           ; Trying to rename a non-existent box -> NO
-          case-three (imap/rename "\"Squids\" \"Octopi\"" sess tdb)
+          case-three (imap/rename "\"Squids\" \"Octopi\"" sess nil)
           ; Target name already exists -> NO
-          case-four (imap/rename "\"Salmon\" \"Newsletters\"" sess tdb)
+          case-four (imap/rename "\"Salmon\" \"Newsletters\"" sess nil)
           ; All good -> OK
-          case-five (imap/rename "\"Newsletters\" \"Timesinks\"" sess tdb)
+          case-five (imap/rename "\"Newsletters\" \"Timesinks\"" sess nil)
           ; `Newsletters` doesn't exist anymore -> NO
-          case-six (imap/rename "\"Newsletters\" \"Timesinks\"" sess tdb)
+          case-six (imap/rename "\"Newsletters\" \"Timesinks\"" sess nil)
           ; Special case, move inbox messages to new box -> OK
-          case-seven (imap/rename "\"INBOX\" \"Squids\"" sess tdb)
+          case-seven (imap/rename "\"INBOX\" \"Squids\"" sess nil)
           ; Special case, move inbox messages to existing box -> OK
-          case-eight (imap/rename "\"INBOX\" \"Salmon\"" sess tdb)]
+          case-eight (imap/rename "\"INBOX\" \"Salmon\"" sess nil)]
     (is (re-matches #"^BAD.*" (:response case-one)))
     (is (re-matches #"^BAD.*" (:response case-two)))
     (is (re-matches #"^NO.*" (:response case-three)))
@@ -187,22 +162,19 @@
     (is (re-matches #"^OK.*" (:response case-five)))
     (is (re-matches #"^NO.*" (:response case-six)))
     (is (re-matches #"^OK.*" (:response case-seven)))
-    (is (re-matches #"^OK.*" (:response case-eight)))
-
-    (j/db-set-rollback-only! tdb))))
-
+    (is (re-matches #"^OK.*" (:response case-eight)))))
 (deftest test-imap-subscribe
-  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+  (let [user (common/get-user-record "lanny@neveraga.in")
         case-one (imap/subscribe "lanny@neveraga.in" 
                                  {:state "authenticated" 
                                   :user user
                                   :subscriptions #{}}
-                                 test-db)
+                                 nil)
         case-two (imap/subscribe "YHWH@neveraga.in"
                                  {:state "authenticated" 
                                   :user user
                                   :subscriptions #{}}
-                                 test-db)]
+                                 nil)]
     (is (re-matches #"BAD.*" (:response case-two)))
     (is (re-matches #"OK.*" (:response case-one)))
     (is (empty? (-> case-two :session :subscriptions)))
@@ -211,25 +183,25 @@
 
 
 (deftest test-imap-fetch
-  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+  (let [user (common/get-user-record "lanny@neveraga.in")
         case-one (imap/fetch "1 BODY" 
                              {:state "selected" 
                               :selected-box "\\Inbox"
                               :user user
                               :subscriptions #{}}
-                             test-db)
+                             nil)
         case-two (imap/fetch "999 BODY"
                              {:state "selected" 
                               :selected-box "\\Inbox"
                               :user user
                               :subscriptions #{}}
-                             test-db)
+                             nil)
         case-three (imap/uid-fetch "1:* (FLAGS UID INTERNALDATE)"
                                    {:state "selected"
                                     :selected-box "\\Inbox"
                                     :user user
                                     :subscriptions #{}}
-                                   test-db)]
+                                   nil)]
     (is (= 1 (count (:response case-two))))
     (is (re-matches #"OK.*" (-> case-one :response last)))
     (is (= 2 (count (:response case-one))))
@@ -244,7 +216,7 @@
              (alength (.getBytes message "UTF-8")))))))
 
 (deftest test-uid-fetch
-  (let [user (common/get-user-record "lanny@neveraga.in" test-db)
+  (let [user (common/get-user-record "lanny@neveraga.in")
         ; Verbs are supposed to be case insensitive, make sure we end up
         ; getting the correct handler.
         case-one (imap/uid-mux "FeTCH 1:* (FLAGS)"
@@ -252,19 +224,19 @@
                                 :selected-box "\\Inbox"
                                 :user user
                                 :subscriptions #{}}
-                               test-db)]
+                               nil)]
 
     (is (re-matches #"OK.*" (-> case-one :response last)))))
 
 (deftest test-imap-list
   (let [session {:state "authenticated"
-                 :user (common/get-user-record "lanny@neveraga.in" test-db)}
+                 :user (common/get-user-record "lanny@neveraga.in")}
         cases [["\"\" \"INBOX\"" #{"INBOX"}]
                ["\"\" \"*\"" #{"INBOX" "Recent"}]
                ["\"lol\" \"INBOX\"" #{}]
                ["\"\" \"squid\"" #{}]]]
     (loop [[[args return] & remaining] cases]
-      (let [{response :response} (imap/list-verb args session test-db)]
+      (let [{response :response} (imap/list-verb args session nil)]
         (is (= (count response) (inc (count return))))
         (doall
           (for [line (butlast response)]

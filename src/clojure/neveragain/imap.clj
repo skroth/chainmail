@@ -18,11 +18,6 @@
     (java.io File)
     (org.mindrot.jbcrypt BCrypt)))
 
-(def LOID 
-  "Convenience constant because :last_insert_rowid() isn't a valid keyword
-  literal."
-  (keyword "last_insert_rowid()"))
-
 (defn pnr [x] (println x) x)
 
 (defn wrap-pure-imap-verb [func]
@@ -123,7 +118,7 @@
       (if-not (and username password)
         {:response "BAD LOGIN should be of the form `LOGIN USERNAME PASSWORD`."
          :session session}
-        (let [user (common/get-user-record username db)]
+        (let [user (common/get-user-record username)]
           (cond
             (not user)
              {:response (format "NO \"%s\" is not a knight of THIS table."
@@ -137,18 +132,12 @@
               :session (merge session {:user user
                                        :state "authenticated"})})))))))
 
-(def mailbox-count-sql "SELECT COUNT(*) AS count
-                       FROM tags
-                       WHERE 
-                         owner_id = ? AND
-                         name = ?;")
-
 (def recent-count-sql "SELECT COUNT(*) AS count 
                        FROM tags AS tags1
                        JOIN tags AS tags2 ON
                          tags1.message_id = tags2.message_id
                        WHERE
-                         tags1.owner_id=? AND
+                         tags1.users_id=? AND
                          tags1.name=? AND
                          tags2.name='\\Recent';")
 
@@ -160,7 +149,7 @@
                             t1.message_id = t2.message_id
                           WHERE
                             t1.name = '\\Recent' AND
-                            t1.owner_id = ? AND
+                            t1.users_id = ? AND
                             t2.name = ?);")
 
 ; All messages in a box without the \Seen tag on them
@@ -171,7 +160,7 @@
                          tags2.name=\"\\Seen\" 
                        WHERE 
                          tags2.id IS NULL AND
-                         tags1.owner_id = ? AND
+                         tags1.users_id = ? AND
                          tags1.name = ?;")
 
 (def first-unread-seq-num-sql "SELECT seq_num FROM messages 
@@ -196,7 +185,7 @@
                        JOIN tags AS tags2 ON
                          tags1.message_id = tags2.message_id
                        WHERE 
-                         tags1.owner_id = ? AND
+                         tags1.users_id = ? AND
                          tags1.name = ? AND
                          tags2.name LIKE '\\%';")
 
@@ -211,25 +200,30 @@
          selected-box (-> (k/select* e/platonic_tags)
                           (k/where {:name box-name
                                     :users_id user-id})
+                          (k/exec)
                           (first))]
      (if (not selected-box) 
        {:response "NO Mailbox does not exist."
         :session session}
-       (let [exists-count (->> [mailbox-count-sql user-id box-name]
-                               (j/query db)
-                               first
-                               :count)
-             recent-count (->> [recent-count-sql user-id box-name]
-                               (j/query db)
-                               first
-                               :count)
-             unseen-seq-num (->> [first-unread-seq-num-sql user-id 
-                                  box-name user-id]
-                                 (j/query db)
-                                 first
-                                 :seq_num)
-             flags-list (->> [flags-in-mailbox user-id box-name]
-                             (j/query db)
+       (let [exists-count (-> (k/select* e/tags)
+                              (k/aggregate (count :name) :count)
+                              (k/where {:users_id user-id
+                                        :name box-name})
+                              (k/exec)
+                              (first)
+                              (:count))
+             recent-count (-> (k/exec-raw [recent-count-sql 
+                                           [user-id box-name]]
+                                          :results)
+                              (first)
+                              (:count))
+             unseen-seq-num (-> (k/exec-raw [first-unread-seq-num-sql
+                                             [user-id box-name user-id]]
+                                            :results)
+                                first
+                                :seq_num)
+             flags-list (->> (k/exec-raw [flags-in-mailbox [user-id box-name]]
+                                         :results)
                              (map :name)
                              (string/join " "))]
          ; We just told the user about all those messages, so clear the
@@ -261,14 +255,14 @@
 
 (defn tag-exists?
   "Returns true if there exists a platonic tag `name` belonging to `user`."
-  [tag user db]
-  (->> [tag (:id user)]
-       (cons "SELECT COUNT(*) as count FROM platonic_tags 
-              WHERE name=? AND owner_id=?")
-       (j/query db)
-       (first)
-       (:count)
-       (pos?)))
+  [tag user]
+  (-> (k/select e/platonic_tags
+        (k/aggregate (count :name) :count)
+        (k/where {:name tag
+                  :users_id (:id user)}))
+      (first)
+      (:count)
+      (pos?)))
 
 (require-state #{"authenticated" "selected"}
 (defn create
@@ -280,6 +274,9 @@
                           (map common/strip-quotes)
                           (filter identity)
                           (map box->tag))]
+     ;(println tag)
+     ;(println (tag-exists? tag (:user session)))
+     ;(println "~~~~~~~~" (k/select e/platonic_tags))
      (cond 
        (not (empty? xs))
          {:session session
@@ -287,16 +284,15 @@
        (empty? tag)
          {:session session
           :response "BAD Hark knave! Thou protest too weakly! (too few args)"}
-       (tag-exists? tag (:user session) db)
+       (tag-exists? tag (:user session))
          {:session session
           :response (str "NO Hark knave! Thou shalt not usurp that title! "
                          "(mailbox name already exists)")}
        :else
          (do
-           (->> {:name tag :owner_id (-> session :user :id)}
-                (j/insert! db :platonic_tags)
-                (first)
-                (LOID))
+           (k/insert e/platonic_tags
+             (k/values {:name tag
+                        :users_id (-> session :user :id)}))
            {:session session
             :response "OK Hail! Thy quest hath succeeded! (mailbox deleted)"}
            ))))))
@@ -317,21 +313,18 @@
        (empty? tag)
          {:session session
           :response "BAD Hark knave! Thou protest too weakly! (too few args)"}
-       (not (tag-exists? tag (:user session) db))
+       (not (tag-exists? tag (:user session)))
          {:session session
           :response (str "NO Hark! The subject of thine query findeth itself "
                          "absent. (no such mailbox).")}
        :else
          (do
-           (->> tag
-                (conj ["DELETE FROM tags WHERE owner_id = ? AND name = ?"
-                       (-> session :user :id)])
-                (j/execute! db))
-           (->> tag
-                (conj ["DELETE FROM platonic_tags 
-                        WHERE owner_id = ? AND name = ?"
-                       (-> session :user :id)])
-                (j/execute! db))
+           (k/delete e/tags
+             (k/where {:users_id (-> session :user :id)
+                       :name tag}))
+           (k/delete e/platonic_tags
+             (k/where {:users_id (-> session :user :id)
+                       :name tag}))
            {:response "OK Hail! Thy quest hath succeeded! (mailbox created)"
             :session session}))))))
 
@@ -353,7 +346,7 @@
        (seq xs)
          {:response "BAD Hark knave! Thou protest too keenly! (too many args)"
           :session session}
-       (not (tag-exists? source user db))
+       (not (tag-exists? source user))
          {:response (str "NO Hark knave! Surely you jest, 'tis no kingdom I "
                          "have ever heard of. (rename source already exists)")
           :session session}
@@ -361,21 +354,28 @@
          ; Special behaviour for inbox source per the spec, we move everything
          ; from there into the target, creating it if need be.
          (do
-           (j/insert! db :platonic_tags {:name target :owner_id (:id user)})
-           (j/execute! db ["UPDATE tags SET name=? WHERE name=?" target source])
+           (k/insert e/platonic_tags
+             (k/values {:name target 
+                        :users_id (:id user)}))
+           (k/update e/tags
+             (k/set-fields {:name target})
+             (k/where {:name source}))
            {:response "OK Hail! Thy quest hath succeeded! (mailbox renamed)"
             :session session})
        ; In the case of inbox moving we actually can move to an existent
        ; target, so do this until after we know this isn't that case.
-       (tag-exists? target user db)
+       (tag-exists? target user)
          {:response (str "NO Hark knave! Another lord hath laid claim here! "
                          "(rename target already exists)")
           :session session}
        :else
          (do
-           (j/execute! db ["UPDATE platonic_tags SET name=? WHERE name=?" 
-                           target source])
-           (j/execute! db ["UPDATE tags SET name=? WHERE name=?" target source])
+           (k/update e/platonic_tags
+             (k/set-fields {:name target})
+             (k/where {:name source}))
+           (k/update e/tags
+             (k/set-fields {:name target})
+             (k/where {:name source}))
            {:response "OK Hail! Thy quest hath succeeded! (mailbox renamed)"
             :session session}))))))
 
@@ -385,7 +385,7 @@
      (subscribe args session settings/db))
     ([args session db]
      (let [parsed (addresses/parse-address args)
-           sub-box (common/get-user-record args db)]
+           sub-box (common/get-user-record args)]
        (cond
          (not sub-box) {:response "BAD Indicated mailbox does not exist"
                         :session session}
@@ -485,44 +485,41 @@
                          (-> parts :right-bound first parseInt))
       :else (throw (Throwable. "Parse accepted string but captured nothing.")))))
 
-(defn gen-range-where-clause 
-  [s col-name])
-
-(defn |_|n54ƒ3
+(defn totally-safe
   "Given a string representing a fetch style number set (either UIDs or
-  sequence numbers) and a column name indicating which, returns a sql string 
-  that can be included as part of a WHERE clause that will narrow the selection
-  to only messages in the specified range.
-
-  e.x. (user)=>(gen-range-where-clause \"(2:10)\" \"seq_num\")
-  \"seq_num >= 2 AND seq_num <= 10\"
-  
-  Note that this function inserts values into the SQL without sanitization."
-  [s col-name]
+  sequence numbers) and a column keyword indicating which, returns a limiting
+  function which, when applied to a korma query, restricts it to the messages
+  indifated."
+  [s col]
   (let [[accepted captured] (pp/parse fetch-range-pda s
                                       #{:single :set :range :set-member
                                         :left-bound :right-bound})
         parts (pp/extract s captured)]
-    ; TODO: Have a sane person look at this and tell me how bad it is.
     (cond
       (not accepted) nil
       (:single parts)
-        (format "%s = %d" col-name (-> parts :single first parseInt))
+        (fn [q]
+          (k/where q {col (-> parts :single first parseInt)}))
       (:set parts)
-        (format "%s IN (%s)" col-name 
-          (string/join ", " 
-                       (map (fn [x] (format "%d" (parseInt x))) 
-                            (:set-member parts))))
+        (fn [q]
+          (->> (:set-member parts)
+               (map (fn [x] (format "%d" (parseInt x))))
+               (string/join ", ")
+               (format "%s IN (%s)" col)
+               (k/raw)
+               (k/where q)))
       (:range parts)
         ; Watch out, it's about to get tricky in here.
         (let [lb (-> parts :left-bound first)
               rb (-> parts :right-bound first)
-              ss (filter identity
-                         (map (fn [x y] (if (= x "*") nil 
-                                          [(str col-name y) (parseInt x)]))
-                              [lb rb] [" >= %d" " <= %d"]))]
-          (apply format (string/join " AND " (map first ss))
-                        (map last ss)))
+              l-lim (if (and lb (not (= lb "*")))
+                      (fn [qq] (k/where qq {col [>= (parseInt lb)]}))
+                      identity)
+              r-lim (if (and rb (not (= rb "*")))
+                      (fn [qq] (k/where qq {col [<= (parseInt rb)]}))
+                      identity)]
+          (fn [q]
+            (-> q l-lim r-lim)))
       :else
         (throw (Throwable. "Parse accepted string but captured nothing.")))))
 
@@ -536,7 +533,7 @@
                                                                   \( \))]
     (if other 
       nil ; Args list is too long, something is wrong
-      [(|_|n54ƒ3 seq-nums (if UID "id" "seq_num"))
+      [(totally-safe seq-nums (if UID :id :seq_num))
        (if (contains? fetch-macros item-names)
          {:field-name (get fetch-macros item-names)}
          (let [[valid captured] (pp/parse fetch-fields-pda item-names
@@ -623,8 +620,10 @@
            [field
             (cond
               (= field "FLAGS")
-                (->> [fetch-flags-sql (:id record)]
-                     (j/query db)
+                (->> (k/select e/tags
+                       (k/fields :name)
+                       (k/where {:message_id (:id record)
+                                 :name [like "\\%"]}))
                      (map :name)
                      (string/join " ")
                      (format "FLAGS (%s)"))
@@ -659,19 +658,32 @@
          (string/join " ")
          (format "%d FETCH (%s)" cur-num))))
 
+(def fetch-query
+  "SELECT * FROM messages 
+  JOIN tags ON
+    tags.message_id = messages.id
+  WHERE 
+    recipient_id = ? AND 
+    tags.name = ? AND 
+    %s;")
+
 (require-state #{"selected"}
 (defn fetch
   ([args session]
    (fetch args session settings/db))
   ([args session db &{:keys [UID]
                       :or   {UID false}}]
-   (let [[where-sql fields] (parse-fetch-args args)
+   (let [[msg-limiter fields] (parse-fetch-args args)
          box-id (:selected-box session)]
-     (if-not (and where-sql fields)
+     (if-not (and msg-limiter fields)
        {:response "BAD Malformed FETCH arguments."
         :session session}
-       (let [sql (format fetch-query where-sql)
-             records (j/query db [sql (-> session :user :id) box-id])]
+       (let [records (-> (k/select* e/messages)
+                         (k/join e/tags (= :id :tags.message_id))
+                         (k/where {:recipient_id (-> session :user :id)
+                                   :tags.name box-id})
+                         (msg-limiter)
+                         (k/exec))]
          {:session session
           :response (-<> (fn [x] (format-record x fields session db UID))
                          (map records)
@@ -697,15 +709,6 @@
         :response "BAD Nay knave! Thine query possesseth not the UID aspect!"}
        ((uid-handler-map (.toUpperCase d-verb)) d-args session db)))))
 
-(def select-mailbox-sql 
-  "SELECT * FROM platonic_tags WHERE owner_id = ? AND name = ?;") 
-
-(def select-all-mailboxes-sql 
-  "SELECT * FROM platonic_tags 
-    WHERE 
-      owner_id = ? AND 
-      (name = ? OR 1);") 
-
 (require-state #{"authenticated" "selected"}
 (defn list-verb
   ([args session]
@@ -726,10 +729,13 @@
          {:session session
           :response "BAD Hark knave, thou hath inundated me with arguments!"}
        :else
-         (let [sql (if (= tag-name "*") 
-                     select-all-mailboxes-sql 
-                     select-mailbox-sql)
-               records (j/query db [sql (-> session :user :id) tag-name])
+         (let [name-limiter (if (= tag-name "*")
+                              identity
+                              (fn [q] (k/where q {:name tag-name})))
+               records (-> (k/select* e/platonic_tags)
+                           (k/where {:users_id (-> session :user :id)})
+                           (name-limiter)
+                           (k/exec))
                lines (for [box records] (format "LIST () NIL %s"
                                                 (tag->box (:name box))))]
            {:session session
