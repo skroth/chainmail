@@ -1,15 +1,17 @@
 (ns neveragain.settings)
 
-(def db {
-  :classname "org.sqlite.JDBC"
-  :subprotocol "sqlite"
-  :subname "neveragain.db"})
+(defn rebind-db
+  [new-db]
+  (def db new-db))
 
-(def keyfiles {
-               :key "../ssl/client.pkcs8"
+(def db 
+  {:classname "org.sqlite.JDBC"
+   :subprotocol "sqlite"
+   :subname "neveragain.db"})
+
+(def keyfiles {:key "../ssl/client.pkcs8"
                :cert "../ssl/client.crt"
-               :ca "../ssl/demoCA/cacert.pem"
-               })
+               :ca "../ssl/demoCA/cacert.pem"})
 
 ;; The time, in seconds, to wait between rescans of watched files for changes.
 ;; set to -1 to disable reloading.

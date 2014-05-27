@@ -1,10 +1,11 @@
 (ns neveragain.common
   (:require
     (clojure [string :as string])
-    (clojure.java [jdbc :refer :all])
     (clojure.data [json :as json])
     [clojure.data.codec.base64 :as b64]
+    (korma [core :as k])
     (neveragain [settings :as settings]
+                [entities :as e]
                 [addresses :as addresses]))
   (:import
     (neveragain CustomPublicKey)
@@ -65,39 +66,28 @@
 (defn get-user-record
   "Takes a string representing a single address and returns the full record of
   the user holding that mailbox."
-  ([address]
-    (get-user-record address settings/db))
-  ([address db]
-   (let [parsed (addresses/parse-address address)]
-     (first
-      (query db ["SELECT * FROM users WHERE address=? AND hostname=? LIMIT 1;"
-                 (:norm-box-name parsed)
-                 (:domain parsed)])))))
+  [address]
+  (let [parsed (addresses/parse-address address)]
+    (-> (k/select e/users)
+        (k/where {:address (:norm-box-name parsed)
+                  :hostname (:domain parsed)})
+        (k/limit 1)
+        (k/exec)
+        (first))))
 
 (defn has-account-here
-  ([address]
-    (has-account-here address settings/db))
-  ([address db]
-   (let [parsed (addresses/parse-address address)]
-     (boolean
-      (first
-       (query db ["SELECT 1 FROM users WHERE address=? AND hostname=?"
-                  (:norm-box-name parsed)
-                  (:domain parsed)]))))))
+  [address]
+  (not (nil? (get-user-record address))))
 
 (defn hash-pass [password]
   (BCrypt/hashpw password (BCrypt/gensalt settings/salt-factor)))
 
 (defn match-pass
-  ([address password]
-    (match-pass address password settings/db))
-  ([address password db]
-    "Returns true if the supplied password matches the stored hashed password
-    for the user with address `address`."
-    (let [user-data (first (query db (into [] (concat
-        ["SELECT hashword FROM users WHERE address=? AND hostname=?"]
-        (string/split address #"@")))))]
-      (BCrypt/checkpw password (:hashword user-data)))))
+  "Returns true if the supplied password matches the stored hashed password
+  for the user with address `address`."
+  [address password db]
+  (let [user-data (get-user-record address)]
+      (BCrypt/checkpw password (:hashword user-data))))
 
 (defn gen-aes-key
   ([]
@@ -247,29 +237,27 @@
     "Encrypt a message and save it to the database, placing it in the inbox of
     the local user with the specified full email address. Returns the id of the
     newly saved message."
-    (let [user (first (query db (into [] (concat
-          ["SELECT * FROM users WHERE address=? AND hostname=? LIMIT 1"]
-          (string/split recipient #"@")))))
-        pub-key (deserialize-pub-key (:elgamal_pub_key user))
-        [cipher-text enc-key iv] (encrypt-message message pub-key)]
+    (let [user (get-user-record recipient)
+          pub-key (deserialize-pub-key (:elgamal_pub_key user))
+          [cipher-text enc-key iv] (encrypt-message message pub-key)]
       ; sqlite's last row id key name doesn't play nice with clojure's syntax
       ; but this'll work
-      (let [message-id ((keyword "last_insert_rowid()") (first
-            (insert! db :messages {
-              :recipient_id (:id user)
-              :data (apply str (map char (b64/encode cipher-text)))
-              :pub_key (:elgamal_pub_key user)
-              :aes_key (apply str (map char (b64/encode enc-key)))
-              :iv (apply str (map char (b64/encode iv)))
-              :recv_date (quot (System/currentTimeMillis) 1000) })))]
-
-        ; Now insert the inbox tag record
-        (insert! db :tags {
-          :owner_id (:id user)
-          :name "inbox"
-          :message_id message-id })
-
-        ; And return the message id, like we said
+      (let [message-id (k/insert (k/values 
+                                   {:recipient_id (:id user)
+                                    :data (->> cipher-text
+                                               (b64/encode)
+                                               (map char)
+                                               (apply str))
+                                    :pub_key (:elgamal_pub_key user)
+                                    :aes_key (->> enc-key
+                                                  (b64/encode)
+                                                  (map char)
+                                                  (apply str))
+                                    :iv (apply str (map char (b64/encode iv)))
+                                    :recv_date (-> (System/currentTimeMillis)
+                                                   (quot 1000))}))]
+        ; Tag creation is taken care of by a sqlite trigger, we hope.
+        ; And we return the message id, as promised
         message-id))))
 
 (defn get-mx-hosts [hostname]
@@ -440,9 +428,8 @@
       (let [user (get-user-record recipient)]
         (if-not user
           (relay-message envl recipient)
-          (let [directives (query db [
-              "SELECT * FROM forwarding_directives WHERE owner_id=?"
-              (:id user)])]
+          (let [directives (k/select e/forwarding_directives
+                             (k/where {:owner_id (:id user)}))]
             ; Save the message to the database no matter what
             (save-raw-message (:data envl) recipient)
 

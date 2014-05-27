@@ -5,9 +5,10 @@
              [pprint :as pprint])
     (clojure.core [async :refer [>! <! >!! go go-loop chan]])
     (swiss [arrows :refer :all])
-    (clojure.java [jdbc :as j])
+    (korma [core :as k])
     (neveragain [common :as common]
                 [settings :as settings]
+                [entities :as e]
                 [imf :as imf]
                 [pdaparse :as pp]
                 [addresses :as addresses]
@@ -207,11 +208,10 @@
    ; Users only have one mailbox, so we don't make the user/mailbox distinction
    (let [user-id (-> session :user :id)
          box-name (box->tag (common/strip-quotes args))
-         selected-box (->> [box-name user-id]
-                           (concat ["SELECT * FROM platonic_tags
-                                    WHERE name=? AND owner_id=?"])
-                           (j/query db)
-                           first)]
+         selected-box (-> (k/select* e/platonic_tags)
+                          (k/where {:name box-name
+                                    :users_id user-id})
+                          (first))]
      (if (not selected-box) 
        {:response "NO Mailbox does not exist."
         :session session}

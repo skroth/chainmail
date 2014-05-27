@@ -22,17 +22,17 @@ CREATE TABLE forwarding_directives
 CREATE TABLE platonic_tags
 ( id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
-  owner_id INTEGER NOT NULL,
-  FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE,
-  UNIQUE(name, owner_id) ON CONFLICT IGNORE);
+  users_id INTEGER NOT NULL,
+  FOREIGN KEY(users_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(name, users_id) ON CONFLICT IGNORE);
 
 CREATE TABLE tags
 ( id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
-  owner_id INTEGER NOT NULL,
+  users_id INTEGER NOT NULL,
   message_id INTEGER NOT NULL,
   FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE,
-  FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(users_id) REFERENCES users(id) ON DELETE CASCADE,
   UNIQUE(name, message_id) ON CONFLICT REPLACE);
 
 CREATE TABLE messages
@@ -51,18 +51,18 @@ CREATE TABLE messages
 CREATE TRIGGER add_tags AFTER INSERT ON messages
   BEGIN
     INSERT INTO tags
-      (name, owner_id, message_id) VALUES
+      (name, users_id, message_id) VALUES
       ("\Recent", new.recipient_id, new.id);
     INSERT INTO tags
-      (name, owner_id, message_id) VALUES
+      (name, users_id, message_id) VALUES
       ("\Inbox", new.recipient_id, new.id);
   END;
 
 CREATE TRIGGER add_platonic_tags AFTER INSERT ON tags
   BEGIN
     INSERT INTO platonic_tags
-      (name, owner_id) VALUES
-      (new.name, new.owner_id);
+      (name, users_id) VALUES
+      (new.name, new.users_id);
   END;
 
 -- A reasonable approximation of an auto increment counter per-mailbox
