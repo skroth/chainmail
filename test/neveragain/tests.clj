@@ -1,10 +1,13 @@
 (ns neveragain.tests
+  (:use [clojure.java.shell :only [sh]])
   (:require
     (clojure [test :refer :all])
     (clojure [string :as string])
-    (clojure.java [jdbc :as j])
+    (korma [core :as k]
+           [db :as korma.db])
     [clojure.data.codec.base64 :as b64]
     (neveragain [common :as common]
+                [entities :as e]
                 [imap :as imap]
                 [addresses :as addresses]))
   (:import
@@ -15,23 +18,22 @@
     (neveragain CustomPublicKey)))
 
 (defn standard-fixture [f]
-  (def test-db {
-    :classname "org.sqlite.JDBC"
-    :subprotocol "sqlite"
-    :subname "test.db"})
+  (sh "sh" "rebuild_db.sh" "test.db")
 
-  (j/db-do-commands test-db
-    "PRAGMA writable_schema = 1;
-     delete from sqlite_master where type = 'table';
-     PRAGMA writable_schema = 0;
-     VACUUM;")
+  (let [test-db (korma.db/create-db {:classname "org.sqlite.JDBC"
+                                     :subprotocol "sqlite"
+                                     :subname "test.db"})]
+    (korma.db/default-connection test-db)
+    (korma.db/with-db test-db (f))))
 
-  (j/db-do-commands test-db [(slurp "test/neveragain/testdata.sql")])
-  (j/db-do-commands test-db [(slurp "src/clojure/neveragain/schema.sql")])
-
-  (f))
+(defn transact-fixture [f]
+  (korma.db/transaction
+    (do
+      (f)
+      (korma.db/rollback))))
 
 (use-fixtures :once standard-fixture)
+(use-fixtures :each transact-fixture)
 
 (deftest test-key-pair-generation
   (let [kp (common/gen-key-pair)]
@@ -76,7 +78,7 @@
   (let [envl {:from "jimmy.hoffa@nowhere.mx"
               :recipients ["lanny@neveraga.in"]
               :data "Waddup amigo!"}
-        user (common/get-user-record "lanny@neveraga.in" test-db)
+        user (common/get-user-record "lanny@neveraga.in")
         res (common/rewrite-for-forwarding envl
                                            user
                                            "lan.rogers.book@gmail.com")]
@@ -85,12 +87,13 @@
     (is (re-matches #"^[a-z]+@.+$" (:from res)))))
 
 (deftest test-has-account-here
-  ; Let's assume the test data has been loaded someone has the "lanny@neveraga.in" account
-  (is (common/has-account-here "lanny@neveraga.in" test-db))
-  (is (not (common/has-account-here "fred@neveraga.in" test-db)))
-  (is (not (common/has-account-here "lanny@unregistereddoma.in" test-db)))
-  (is (common/has-account-here "l.a.nny@neveraga.in" test-db))
-  (is (common/has-account-here "lanny+lol@neveraga.in" test-db)))
+  ; Let's assume the test data has been loaded someone has the 
+  ; "lanny@neveraga.in" account
+  (is (common/has-account-here "lanny@neveraga.in"))
+  (is (not (common/has-account-here "fred@neveraga.in")))
+  (is (not (common/has-account-here "lanny@unregistereddoma.in")))
+  (is (common/has-account-here "l.a.nny@neveraga.in"))
+  (is (common/has-account-here "lanny+lol@neveraga.in")))
 
 ; Addresses stuff
 (deftest test-atom-recognition

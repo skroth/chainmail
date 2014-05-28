@@ -26,7 +26,7 @@
       (korma.db/rollback))))
 
 (use-fixtures :once standard-fixture)
-;(use-fixtures :each transact-fixture)
+(use-fixtures :each transact-fixture)
 
 (deftest test-imap-noop
   (let [session {:dummy-key false}
