@@ -109,28 +109,26 @@
 
 (require-state #{nil}
 (defn login 
-  ([args session]
-   (login args session settings/db))
-  ([args session db]
-    (let [[_ username password] (re-matches #"^(\S+|\".+\"\S+) (\S+)$" args)
-          username (common/strip-quotes username)
-          password (common/strip-quotes password)]
-      (if-not (and username password)
-        {:response "BAD LOGIN should be of the form `LOGIN USERNAME PASSWORD`."
-         :session session}
-        (let [user (common/get-user-record username)]
-          (cond
-            (not user)
-             {:response (format "NO \"%s\" is not a knight of THIS table."
-                                username)
-              :session session}
-            (not (BCrypt/checkpw password (:hashword user)))
-             {:response "NO Account recognized but password did not match."
-              :session session}
-            :else
-             {:response "OK LOGIN successful."
-              :session (merge session {:user user
-                                       :state "authenticated"})})))))))
+  [args session]
+  (let [[_ username password] (re-matches #"^(\S+|\".+\"\S+) (\S+)$" args)
+        username (common/strip-quotes username)
+        password (common/strip-quotes password)]
+    (if-not (and username password)
+      {:response "BAD LOGIN should be of the form `LOGIN USERNAME PASSWORD`."
+       :session session}
+      (let [user (common/get-user-record username)]
+        (cond
+          (not user)
+           {:response (format "NO \"%s\" is not a knight of THIS table."
+                              username)
+            :session session}
+          (not (BCrypt/checkpw password (:hashword user)))
+           {:response "NO Account recognized but password did not match."
+            :session session}
+          :else
+           {:response "OK LOGIN successful."
+            :session (merge session {:user user
+                                     :state "authenticated"})}))))))
 
 (def recent-count-sql "SELECT COUNT(*) AS count 
                        FROM tags AS tags1
@@ -191,66 +189,61 @@
 
 (require-state #{"authenticated" "selected"}
 (defn select
-  ([args session]
-   (select args session settings/db))
-  ([args session db]
-   ; Users only have one mailbox, so we don't make the user/mailbox distinction
-   (let [user-id (-> session :user :id)
-         box-name (box->tag (common/strip-quotes args))
-         selected-box (-> (k/select* e/platonic_tags)
-                          (k/where {:name box-name
-                                    :users_id user-id})
-                          (k/exec)
-                          (first))]
-     (if (not selected-box) 
-       {:response "NO Mailbox does not exist."
-        :session session}
-       (let [exists-count (-> (k/select* e/tags)
-                              (k/aggregate (count :name) :count)
-                              (k/where {:users_id user-id
-                                        :name box-name})
-                              (k/exec)
-                              (first)
-                              (:count))
-             recent-count (-> (k/exec-raw [recent-count-sql 
-                                           [user-id box-name]]
-                                          :results)
-                              (first)
-                              (:count))
-             unseen-seq-num (-> (k/exec-raw [first-unread-seq-num-sql
-                                             [user-id box-name user-id]]
-                                            :results)
-                                first
-                                :seq_num)
-             flags-list (->> (k/exec-raw [flags-in-mailbox [user-id box-name]]
+  [args session]
+  ; Users only have one mailbox, so we don't make the user/mailbox distinction
+ (let [user-id (-> session :user :id)
+        box-name (box->tag (common/strip-quotes args))
+        selected-box (-> (k/select* e/platonic_tags)
+                         (k/where {:name box-name
+                                   :users_id user-id})
+                         (k/exec)
+                         (first))]
+    (if (not selected-box) 
+      {:response "NO Mailbox does not exist."
+       :session session}
+      (let [exists-count (-> (k/select* e/tags)
+                             (k/aggregate (count :name) :count)
+                             (k/where {:users_id user-id
+                                       :name box-name})
+                             (k/exec)
+                             (first)
+                             (:count))
+            recent-count (-> (k/exec-raw [recent-count-sql 
+                                          [user-id box-name]]
                                          :results)
-                             (map :name)
-                             (string/join " "))]
-         ; We just told the user about all those messages, so clear the
-         ; /Recent flags
-         ; Hmm, scratch that, not sure that's right
-         ;(if-not (:read-only session)
-         ;  (j/execute! db [clear-recent-sql user-id box-name]))
+                             (first)
+                             (:count))
+            unseen-seq-num (-> (k/exec-raw [first-unread-seq-num-sql
+                                            [user-id box-name user-id]]
+                                           :results)
+                               first
+                               :seq_num)
+            flags-list (->> (k/exec-raw [flags-in-mailbox [user-id box-name]]
+                                        :results)
+                            (map :name)
+                            (string/join " "))]
+        ; We just told the user about all those messages, so clear the
+        ; /Recent flags
+        ; Hmm, scratch that, not sure that's right
+        ;(if-not (:read-only session)
+        ;  (j/execute! db [clear-recent-sql user-id box-name]))
 
-         ; And give them our response
-         (let [response [(format "%d EXISTS" exists-count)
-                         (format "%d RECENT" recent-count)
-                         (format "FLAGS (%s)" flags-list)]
-               unseen-line (format "OK [UNSEEN %d]" unseen-seq-num)
-               complete-line "OK SELECT command complete"]
-
-           {:response (if unseen-seq-num
-                        (conj response unseen-line complete-line)
-                        (conj response complete-line))
-            :session (merge session {:selected-box (:name selected-box)
-                                     :state "selected"})})))))))
+        ; And give them our response
+        (let [response [(format "%d EXISTS" exists-count)
+                        (format "%d RECENT" recent-count)
+                        (format "FLAGS (%s)" flags-list)]
+              unseen-line (format "OK [UNSEEN %d]" unseen-seq-num)
+              complete-line "OK SELECT command complete"]
+          {:response (if unseen-seq-num
+                       (conj response unseen-line complete-line)
+                       (conj response complete-line))
+           :session (merge session {:selected-box (:name selected-box)
+                                    :state "selected"})}))))))
 
 (require-state #{"authenticated" "selected"}
 (defn examine 
-  ([args session]
-   (examine args session settings/db))
-  ([args session db]
-   (select args (assoc session :read-only true) db))))
+  [args session]
+  (select args (assoc session :read-only true))))
 
 
 (defn tag-exists?
@@ -266,145 +259,135 @@
 
 (require-state #{"authenticated" "selected"}
 (defn create
-  ([args session]
-   (create args session settings/db))
-  ([args session db]
-   (let [[tag & xs]  (->> args 
-                          addresses/quote-atom-split 
-                          (map common/strip-quotes)
-                          (filter identity)
-                          (map box->tag))]
-     ;(println tag)
-     ;(println (tag-exists? tag (:user session)))
-     ;(println "~~~~~~~~" (k/select e/platonic_tags))
-     (cond 
-       (not (empty? xs))
-         {:session session
-          :response "BAD Hark knave! Thou protest too keenly! (too many args)"}
-       (empty? tag)
-         {:session session
-          :response "BAD Hark knave! Thou protest too weakly! (too few args)"}
-       (tag-exists? tag (:user session))
-         {:session session
-          :response (str "NO Hark knave! Thou shalt not usurp that title! "
-                         "(mailbox name already exists)")}
-       :else
-         (do
-           (k/insert e/platonic_tags
-             (k/values {:name tag
-                        :users_id (-> session :user :id)}))
-           {:session session
-            :response "OK Hail! Thy quest hath succeeded! (mailbox deleted)"}
-           ))))))
+  [args session]
+  (let [[tag & xs]  (->> args 
+                         addresses/quote-atom-split 
+                         (map common/strip-quotes)
+                         (filter identity)
+                         (map box->tag))]
+    ;(println tag)
+    ;(println (tag-exists? tag (:user session)))
+    ;(println "~~~~~~~~" (k/select e/platonic_tags))
+    (cond 
+      (not (empty? xs))
+        {:session session
+         :response "BAD Hark knave! Thou protest too keenly! (too many args)"}
+      (empty? tag)
+        {:session session
+         :response "BAD Hark knave! Thou protest too weakly! (too few args)"}
+      (tag-exists? tag (:user session))
+        {:session session
+         :response (str "NO Hark knave! Thou shalt not usurp that title! "
+                        "(mailbox name already exists)")}
+      :else
+        (do
+          (k/insert e/platonic_tags
+            (k/values {:name tag
+                       :users_id (-> session :user :id)}))
+          {:session session
+           :response "OK Hail! Thy quest hath succeeded! (mailbox deleted)"}
+          )))))
 
 (require-state #{"authenticated" "selected"}
 (defn delete
-  ([args session]
-   (delete args session settings/db))
-  ([args session db]
-   (let [[box & xs]  (->> args 
-                          addresses/quote-atom-split 
-                          (map common/strip-quotes))
-         tag (if box (box->tag box) nil)]
-     (cond 
-       (not (empty? xs))
-         {:session session
-          :response "BAD Hark knave! Thou protest too keenly! (too many args)"}
-       (empty? tag)
-         {:session session
-          :response "BAD Hark knave! Thou protest too weakly! (too few args)"}
-       (not (tag-exists? tag (:user session)))
-         {:session session
-          :response (str "NO Hark! The subject of thine query findeth itself "
-                         "absent. (no such mailbox).")}
-       :else
-         (do
-           (k/delete e/tags
-             (k/where {:users_id (-> session :user :id)
-                       :name tag}))
-           (k/delete e/platonic_tags
-             (k/where {:users_id (-> session :user :id)
-                       :name tag}))
-           {:response "OK Hail! Thy quest hath succeeded! (mailbox created)"
-            :session session}))))))
+  [args session]
+  (let [[box & xs]  (->> args 
+                         addresses/quote-atom-split 
+                         (map common/strip-quotes))
+        tag (if box (box->tag box) nil)]
+    (cond
+      (not (empty? xs))
+        {:session session
+         :response "BAD Hark knave! Thou protest too keenly! (too many args)"}
+      (empty? tag)
+        {:session session
+         :response "BAD Hark knave! Thou protest too weakly! (too few args)"}
+      (not (tag-exists? tag (:user session)))
+        {:session session
+         :response (str "NO Hark! The subject of thine query findeth itself "
+                        "absent. (no such mailbox).")}
+      :else
+        (do
+          (k/delete e/tags
+            (k/where {:users_id (-> session :user :id)
+                      :name tag}))
+          (k/delete e/platonic_tags
+            (k/where {:users_id (-> session :user :id)
+                      :name tag}))
+          {:response "OK Hail! Thy quest hath succeeded! (mailbox created)"
+           :session session})))))
 
 (require-state #{"authenticated" "selected"}
 (defn rename
-  ([args session]
-   (rename args session settings/db))
-  ([args session db]
-   (let [[source target & xs]  (->> args 
-                                    addresses/quote-atom-split 
-                                    (filter identity)
-                                    (map common/strip-quotes)
-                                    (map box->tag))
-         user (:user session)]
-     (cond
-       (not (and source target))
-         {:response "BAD Hark knave! Thou protest too weakly! (too few args)"
-          :session session}
-       (seq xs)
-         {:response "BAD Hark knave! Thou protest too keenly! (too many args)"
-          :session session}
-       (not (tag-exists? source user))
-         {:response (str "NO Hark knave! Surely you jest, 'tis no kingdom I "
-                         "have ever heard of. (rename source already exists)")
-          :session session}
-       (= source "\\Inbox")
-         ; Special behaviour for inbox source per the spec, we move everything
-         ; from there into the target, creating it if need be.
-         (do
-           (k/insert e/platonic_tags
-             (k/values {:name target 
-                        :users_id (:id user)}))
-           (k/update e/tags
-             (k/set-fields {:name target})
-             (k/where {:name source}))
-           {:response "OK Hail! Thy quest hath succeeded! (mailbox renamed)"
-            :session session})
-       ; In the case of inbox moving we actually can move to an existent
-       ; target, so do this until after we know this isn't that case.
-       (tag-exists? target user)
-         {:response (str "NO Hark knave! Another lord hath laid claim here! "
-                         "(rename target already exists)")
-          :session session}
-       :else
-         (do
-           (k/update e/platonic_tags
-             (k/set-fields {:name target})
-             (k/where {:name source}))
-           (k/update e/tags
-             (k/set-fields {:name target})
-             (k/where {:name source}))
-           {:response "OK Hail! Thy quest hath succeeded! (mailbox renamed)"
-            :session session}))))))
+  [args session]
+  (let [[source target & xs]  (->> args 
+                                   addresses/quote-atom-split 
+                                   (filter identity)
+                                   (map common/strip-quotes)
+                                   (map box->tag))
+        user (:user session)]
+    (cond
+      (not (and source target))
+        {:response "BAD Hark knave! Thou protest too weakly! (too few args)"
+         :session session}
+      (seq xs)
+        {:response "BAD Hark knave! Thou protest too keenly! (too many args)"
+         :session session}
+      (not (tag-exists? source user))
+        {:response (str "NO Hark knave! Surely you jest, 'tis no kingdom I "
+                        "have ever heard of. (rename source already exists)")
+         :session session}
+      (= source "\\Inbox")
+        ; Special behaviour for inbox source per the spec, we move everything
+        ; from there into the target, creating it if need be.
+        (do
+          (k/insert e/platonic_tags
+            (k/values {:name target 
+                       :users_id (:id user)}))
+          (k/update e/tags
+            (k/set-fields {:name target})
+            (k/where {:name source}))
+          {:response "OK Hail! Thy quest hath succeeded! (mailbox renamed)"
+           :session session})
+      ; In the case of inbox moving we actually can move to an existent
+      ; target, so do this until after we know this isn't that case.
+      (tag-exists? target user)
+        {:response (str "NO Hark knave! Another lord hath laid claim here! "
+                        "(rename target already exists)")
+         :session session}
+      :else
+        (do
+          (k/update e/platonic_tags
+            (k/set-fields {:name target})
+            (k/where {:name source}))
+          (k/update e/tags
+            (k/set-fields {:name target})
+            (k/where {:name source}))
+          {:response "OK Hail! Thy quest hath succeeded! (mailbox renamed)"
+           :session session})))))
 
 (require-state #{"authenticated" "selected"}
-  (defn subscribe
-    ([args session]
-     (subscribe args session settings/db))
-    ([args session db]
-     (let [parsed (addresses/parse-address args)
-           sub-box (common/get-user-record args)]
-       (cond
-         (not sub-box) {:response "BAD Indicated mailbox does not exist"
-                        :session session}
-         (not (addresses/addr-equality args 
-                                       (addresses/c-addr (:user session))))
-           {:response "NO You can't subscribe to that mailbox"}
-         :else
-           {:response (format "OK Subscribed to %s" args)
-            :session (assoc session 
-                            :subscriptions 
-                            (conj (:subscriptions session) 
-                                  (:norm-addr parsed)))})))))
+(defn subscribe
+  [args session]
+  (let [parsed (addresses/parse-address args)
+        sub-box (common/get-user-record args)]
+    (cond
+      (not sub-box) {:response "BAD Indicated mailbox does not exist"
+                     :session session}
+      (not (addresses/addr-equality args 
+                                    (addresses/c-addr (:user session))))
+        {:response "NO You can't subscribe to that mailbox"}
+      :else
+        {:response (format "OK Subscribed to %s" args)
+         :session (assoc session 
+                         :subscriptions 
+                         (conj (:subscriptions session) 
+                               (:norm-addr parsed)))}))))
 
 (require-state #{"authenticated" "selected"}
-  (defn lsub
-    ([args session]
-     (subscribe args session settings/db))
-    ([args session db]
-     nil)))
+(defn lsub
+  [args session]
+  nil))
 
 (def fetch-macros
   {"ALL"  #{"FLAGS" "INTERNALDATE" "RFC822.SIZE" "ENVELOPE"}
@@ -605,7 +588,7 @@
 (defn format-record
   "Takes a database record and formats it as one 'line' to be sent over imap.
   Beware that we may end up changing DB state based on what fields are present."
-  [record fields session db UID]
+  [record fields session UID]
   (let [wrapped (->> session
                      (:user)
                      (addresses/c-addr)
@@ -669,30 +652,28 @@
 
 (require-state #{"selected"}
 (defn fetch
-  ([args session]
-   (fetch args session settings/db))
-  ([args session db &{:keys [UID]
-                      :or   {UID false}}]
-   (let [[msg-limiter fields] (parse-fetch-args args)
-         box-id (:selected-box session)]
-     (if-not (and msg-limiter fields)
-       {:response "BAD Malformed FETCH arguments."
-        :session session}
-       (let [records (-> (k/select* e/messages)
-                         (k/join e/tags (= :id :tags.message_id))
-                         (k/where {:recipient_id (-> session :user :id)
-                                   :tags.name box-id})
-                         (msg-limiter)
-                         (k/exec))]
-         {:session session
-          :response (-<> (fn [x] (format-record x fields session db UID))
-                         (map records)
-                         (into [] <>)
-                         (conj "OK FETCH complete. Hail milord!"))}))))))
+  [args session &{:keys [UID]
+                  :or   {UID false}}]
+  (let [[msg-limiter fields] (parse-fetch-args args)
+        box-id (:selected-box session)]
+    (if-not (and msg-limiter fields)
+      {:response "BAD Malformed FETCH arguments."
+       :session session}
+      (let [records (-> (k/select* e/messages)
+                        (k/join e/tags (= :id :tags.message_id))
+                        (k/where {:recipient_id (-> session :user :id)
+                                  :tags.name box-id})
+                        (msg-limiter)
+                        (k/exec))]
+        {:session session
+         :response (-<> (fn [x] (format-record x fields session UID))
+                        (map records)
+                        (into [] <>)
+                        (conj "OK FETCH complete. Hail milord!"))})))))
 (defn uid-fetch 
   ;No variadic form because kwargs and multiple arities don't seem to get along
-  [args session db]
-  (fetch args session db :UID true))
+  [args session]
+  (fetch args session :UID true))
 
 (def uid-handler-map
   {"FETCH" uid-fetch})
@@ -700,56 +681,49 @@
 (defn uid-mux
   "Technically an IMAP verb, only exists to delegate to the UID forms of other
   verbs."
-  ([args session]
-   (uid-mux args session settings/db))
-  ([args session db]
-   (let [[_ d-verb d-args] (re-matches #"(?i)(FETCH) +(.+)$" args)]
-     (if-not d-verb
-       {:session session
-        :response "BAD Nay knave! Thine query possesseth not the UID aspect!"}
-       ((uid-handler-map (.toUpperCase d-verb)) d-args session db)))))
+  [args session]
+  (let [[_ d-verb d-args] (re-matches #"(?i)(FETCH) +(.+)$" args)]
+    (if-not d-verb
+      {:session session
+       :response "BAD Nay knave! Thine query possesseth not the UID aspect!"}
+      ((uid-handler-map (.toUpperCase d-verb)) d-args session))))
 
 (require-state #{"authenticated" "selected"}
 (defn list-verb
-  ([args session]
-   (list-verb args session settings/db))
-  ([args session db]
-   (let [[left-part right-part & remaining] (addresses/quote-atom-split args)
-         left-part (common/strip-quotes left-part)
-         right-part (common/strip-quotes right-part)
-         tag-name (->> [left-part right-part]
-                       (filter (fn [x] (pos? (count x))))
-                       (string/join "." )
-                       (box->tag))]
-     (cond
-       (not (and left-part right-part))
-         {:session session
-          :response "BAD Hark knave, thou laketh in arguments!"}
-       (not (empty? remaining))
-         {:session session
-          :response "BAD Hark knave, thou hath inundated me with arguments!"}
-       :else
-         (let [name-limiter (if (= tag-name "*")
-                              identity
-                              (fn [q] (k/where q {:name tag-name})))
-               records (-> (k/select* e/platonic_tags)
-                           (k/where {:users_id (-> session :user :id)})
-                           (name-limiter)
-                           (k/exec))
-               lines (for [box records] (format "LIST () NIL %s"
-                                                (tag->box (:name box))))]
-           {:session session
-            :response (conj (into [] lines) 
-                            "OK LIST completed, my liege.")}))))))
+  [args session]
+  (let [[left-part right-part & remaining] (addresses/quote-atom-split args)
+        left-part (common/strip-quotes left-part)
+        right-part (common/strip-quotes right-part)
+        tag-name (->> [left-part right-part]
+                      (filter (fn [x] (pos? (count x))))
+                      (string/join "." )
+                      (box->tag))]
+    (cond
+      (not (and left-part right-part))
+        {:session session
+         :response "BAD Hark knave, thou laketh in arguments!"}
+      (not (empty? remaining))
+        {:session session
+         :response "BAD Hark knave, thou hath inundated me with arguments!"}
+      :else
+        (let [name-limiter (if (= tag-name "*")
+                             identity
+                             (fn [q] (k/where q {:name tag-name})))
+              records (-> (k/select* e/platonic_tags)
+                          (k/where {:users_id (-> session :user :id)})
+                          (name-limiter)
+                          (k/exec))
+              lines (for [box records] (format "LIST () NIL %s"
+                                               (tag->box (:name box))))]
+          {:session session
+           :response (conj (into [] lines) 
+                           "OK LIST completed, my liege.")})))))
 
 (def null-verb
   (wrap-pure-imap-verb
-    (fn 
-      ([args session db]
-       (fetch args session))
-      ([args session]
-       {:response "BAD No such verb."
-        :session session}))))
+    (fn [args session]
+      {:response "BAD No such verb."
+       :session session})))
 
 (def handler-map {"NOOP" (wrap-pure-imap-verb noop)
                   "CAPABILITY" (wrap-pure-imap-verb capability)
