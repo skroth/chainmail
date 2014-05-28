@@ -58,5 +58,5 @@ Subject: This one has no body at all!\n"))
 
     (is (:headers result-one))
     (is (:body result-one))
-    (is (= (:To (:headers result-one)) "lanny@neveraga.in"))
-    (is (= (:From (:headers result-one)) "lan.rogers.book@gmail.com"))))
+    (is (= (:to (:headers result-one)) "lanny@neveraga.in"))
+    (is (= (:from (:headers result-one)) "lan.rogers.book@gmail.com"))))
