@@ -369,20 +369,23 @@
 (require-state #{"authenticated" "selected"}
 (defn subscribe
   [args session]
-  (let [parsed (addresses/parse-address args)
-        sub-box (common/get-user-record args)]
+  (let [tag (-> args
+                common/strip-quotes
+                box->tag)]
     (cond
-      (not sub-box) {:response "BAD Indicated mailbox does not exist"
-                     :session session}
-      (not (addresses/addr-equality args 
-                                    (addresses/c-addr (:user session))))
-        {:response "NO You can't subscribe to that mailbox"}
+      (empty? tag)
+        {:response (str "BAD Hark knave, proveth thy metel, provideth thine "
+                        "mailbox! (no args given, one expected)")
+         :session session}
+      (not (tag-exists? tag (:user session)))
+        {:response (str "NO Hark knave, hold thy tongue lest it lie again! "
+                        "(no such mailbox)")
+         :session session}
       :else
-        {:response (format "OK Subscribed to %s" args)
-         :session (assoc session 
-                         :subscriptions 
-                         (conj (:subscriptions session) 
-                               (:norm-addr parsed)))}))))
+        {:response "OK Hail! Thou art subscribed! (subscription successful)"
+         :session (->> tag
+                       (conj (or (:subscriptions session) #{}))
+                       (assoc session :subscriptions))}))))
 
 (require-state #{"authenticated" "selected"}
 (defn lsub
@@ -730,8 +733,9 @@
                   "LOGIN" (wrap-pure-imap-verb login)
                   "SELECT" (wrap-pure-imap-verb select)
                   "CREATE" (wrap-pure-imap-verb create)
-                  "LIST" (wrap-pure-imap-verb list-verb)
                   "DELETE" (wrap-pure-imap-verb delete)
+                  "RENAME" (wrap-pure-imap-verb rename)
+                  "LIST" (wrap-pure-imap-verb list-verb)
                   "SUBSCRIBE" (wrap-pure-imap-verb subscribe)
                   "FETCH" (wrap-pure-imap-verb fetch)
                   "LOGOUT" (wrap-pure-imap-verb logout)

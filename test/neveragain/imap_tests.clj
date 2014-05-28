@@ -162,20 +162,34 @@
 
 (deftest test-imap-subscribe
   (let [user (common/get-user-record "lanny@neveraga.in")
-        case-one (imap/subscribe "lanny@neveraga.in" 
+        ; OK, All's well
+        case-one (imap/subscribe "\"INBOX\""
+                                 {:state "authenticated" 
+                                  :user user})
+        ; NO Newsletters doesn't exist it can't be subscribed to
+        case-two (imap/subscribe "Newsletters"
                                  {:state "authenticated" 
                                   :user user
                                   :subscriptions #{}})
-        case-two (imap/subscribe "YHWH@neveraga.in"
-                                 {:state "authenticated" 
-                                  :user user
-                                  :subscriptions #{}})]
-    (is (re-matches #"BAD.*" (:response case-two)))
-    (is (re-matches #"OK.*" (:response case-one)))
-    (is (empty? (-> case-two :session :subscriptions)))
-    (is (not (empty? (-> case-one :session :subscriptions))))
-    (is (= (-> case-one :session :subscriptions first) "lanny@neveraga.in"))))
+        ; OK again, we'll ched the trash sub doesn't get deleted
+        case-three (imap/subscribe "INBOX"
+                                   {:state "authenticated" 
+                                    :user user
+                                    :subscriptions #{"MB-TRASH"}})
+        ; BAD no mailbox
+        case-four (imap/subscribe ""
+                                  {:state "authenticated" 
+                                   :user user
+                                   :subscriptions #{}})]
+    (is (re-matches #"^OK.*" (:response case-one)))
+    (is (re-matches #"^NO.*" (:response case-two)))
+    (is (re-matches #"^OK.*" (:response case-three)))
+    (is (re-matches #"^BAD.*" (:response case-four)))
 
+    (is (= (-> case-one :session :subscriptions) #{"\\Inbox"}))
+    (is (= (-> case-two :session :subscriptions) #{}))
+    (is (= (-> case-three :session :subscriptions) #{"\\Inbox" "MB-TRASH"}))
+    (is (= (-> case-four :session :subscriptions) #{}))))
 
 (deftest test-imap-fetch
   (let [user (common/get-user-record "lanny@neveraga.in")
