@@ -1,6 +1,6 @@
 (defproject neveragain "0.1.0-SNAPSHOT"
   :description "A secure full package email solution that provides server software and web client front end."
-  :url "http://example.com/FIXME"
+  :url "https://github.com/skroth/chainmail"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [
@@ -18,8 +18,7 @@
     [selmer "0.5.7"]
     [less-awful-ssl "0.1.1"]]
   :plugins [[lein-ring "0.7.1"] 
-            [lein-cljsbuild "0.2.8"]
-            [lein-environ "0.5.0"]]
+            [lein-cljsbuild "0.2.8"]]
   :cljsbuild
   {:builds
    [{

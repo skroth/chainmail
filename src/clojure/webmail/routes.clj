@@ -18,7 +18,8 @@
 
 (defn direct-to-template [template-name]
   (fn [request]
-    (selmer/render-file (str "webmail/templates/" template-name) (:session request))))
+    (selmer/render-file (str "webmail/templates/" template-name) 
+                        (:session request))))
 
 (defroutes url-routes
   (GET "/" [request] views/index)
