@@ -163,7 +163,7 @@
            :key (json/read-str (serialize-key-pair key-pair))})))))
 
 (defn address-available
-  [{{address "address"} :params} db]
+  [{{address "address"} :params}]
   (if-not address
     {:status 422
      :body (str "Hark! Even I can not peer beyond the veil of missing "
@@ -171,7 +171,7 @@
     (json/write-str
       {:result (and (contains? settings/controlled-domains 
                                (:domain (addresses/parse-address address)))
-                    (not (has-account-here address db)))})))
+                    (not (has-account-here address)))})))
 
 (defn index [request]
  (if (:user (:session request))
@@ -198,5 +198,5 @@
         (k/exec base-query)))))
 
 (defn settings
-  [request db]
+  [request]
   (selmer/render-file "webmail/templates/settings.html" nil))
