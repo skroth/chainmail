@@ -10,7 +10,7 @@
 
   (:import
     (javax.net.ssl SSLSocket SSLServerSocket)
-    (java.net ServerSocket InetAddress)
+    (java.net ServerSocket InetAddress SocketTimeoutException)
     (java.util.concurrent Executors)
     (java.util Date)
     (java.io PrintWriter File)
@@ -110,16 +110,29 @@
   ; take that to mean this sessions has ended.
   (loop [envl {} inner-conn conn]
     (let [msg (try
-        (.next (:in inner-conn)) ; Could happen if the client closed the connection.
-        (catch NoSuchElementException e nil))]
+                ; Could happen if the client closed the connection.
+                (.next (:in inner-conn))
+                (catch NoSuchElementException e :timeout)
+                (catch SocketTimeoutException e :disconnect))]
       (println "C: " msg)
-      (if (= msg nil)
-        nil
-        (let [response (respond inner-conn msg envl)]
-          (cond
-            (not= (:socket response) nil) (recur envl response)
-            (= response nil) nil
-            :else (recur response inner-conn)))))))
+      (cond
+        (= msg :timeout)
+          (do
+            (write-out (:out conn) (str "500 Hark knave, thine inactivity "
+                                        "hath become thine undoing! Thou art "
+                                        "vanquished! (dropping connection)"))
+            (.close (:socket conn))
+            nil)
+        (nil? msg)
+          (do
+            (println "Hark milord, yon plebian douth closeth the connection.")
+            nil)
+        :else
+          (let [response (respond inner-conn msg envl)]
+            (cond
+              (not= (:socket response) nil) (recur envl response)
+              (= response nil) nil
+              :else (recur response inner-conn)))))))
 
 (defn serve-forever [serv-socket thread-count]
   (let [thread-pool (Executors/newFixedThreadPool thread-count)]
@@ -127,6 +140,7 @@
     (while (= 1 1)
       (let [client-socket (.accept serv-socket)
             conn (make-conn client-socket)]
+        (.setSoTimeout client-socket settings/smtp-session-timeout)
         (.execute thread-pool (fn [] (handle-conn conn)))))))
 
 (defn -main [& args]

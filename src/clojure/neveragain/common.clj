@@ -283,10 +283,9 @@
   "Takes a socket and returns a map of wrapped input and output streams along
   with the original socket. This configuration is generally used to represent
   a foreign connection within this project."
-  (let [conn {
-      :in (Scanner. (.getInputStream s))
-      :out (PrintWriter. (.getOutputStream s))
-      :socket s}]
+  (let [conn {:in (Scanner. (.getInputStream s))
+              :out (PrintWriter. (.getOutputStream s))
+              :socket s}]
     (.useDelimiter (:in conn) #"\r\n")
     conn))
 

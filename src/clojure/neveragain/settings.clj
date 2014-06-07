@@ -17,13 +17,19 @@
 ;; set to -1 to disable reloading.
 (def reload-interval 1)
 
+;; Size of thread pool for SMTP server
 (def thread-count 1)
+
 (def smtp-port 2500)
 (def tls-smtp-port 4650)
 (def salt-factor 10)
 (def controlled-domains #{"neveraga.in"
                           "lannysport.net"
                           "chainmail.io"})
+
+;; Number of milliseconds with no activity before we close a smtp session
+(def smtp-session-timeout (* 10 1000))
+
 ;; Make sure aes size is lower than ecc size. We don't use any blocking scheme
 ;; with the public keys so we have to be able to encrypt the aes keys in one block
 (def default-ecc-key-size 256)
