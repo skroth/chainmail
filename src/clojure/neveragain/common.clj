@@ -2,6 +2,7 @@
   (:require
     (clojure [string :as string])
     (clojure.data [json :as json])
+    (swiss [arrows :refer :all])
     [clojure.data.codec.base64 :as b64]
     (korma [core :as k])
     (neveragain [settings :as settings]
@@ -28,6 +29,8 @@
 
 ;; Mmhmm, I love me some good ole state
 (Security/addProvider (new BouncyCastleProvider))
+
+(defn pnr [x] (println x) x)
 
 (defn write-out [out-writer message]
   "Write a line to the socket (or any print writer) and flush."
@@ -63,6 +66,63 @@
     (.substring s 1 (dec (count s)))
     s))
 
+(defn unix-now 
+  "Returns the current unix time"
+  [] 
+  (quot (.getTime (Date.)) 1000))
+
+
+;; Authentication rate limiting functions. An emotive bunch
+(defn can-authenticate?
+  "Queries the database and returns clear if this inet address is clear to
+  attempt authentication."
+  [inet-addr]
+  (let [addr (.getHostAddress inet-addr)
+        record (first (k/select e/auth_attempts
+                        (k/where {:address addr})))]
+    (or (nil? record)
+        (>= (unix-now) (:reset_at record)))))
+
+(defn i-can-haz-auth-time!?!
+  "ISO time string of when this inet address can try to authenticate again!?!"
+  [inet-addr]
+  (-<> (k/select* e/auth_attempts)
+       (k/where {:address (.getHostAddress inet-addr)})
+       (k/exec)
+       (first)
+       (or {:reset_at 0})
+       (:reset_at)
+       (* 1000)
+       (Date.)
+       (strftime "%Y-%m-%dT%H:%M:%S %Z" <>)))
+
+(defn failed-auth!
+  "Increments the failed attempts counter and updates reset_at for the provided
+  address."
+  [inet-addr]
+  (let [addr (.getHostAddress inet-addr)
+        record (first (k/select e/auth_attempts (k/where {:address addr})))
+        attempts (-> record :attempts (or 0) inc)
+        reset-at (if (<= attempts settings/repeated-login-grace)
+                   (unix-now)
+                   (+ (unix-now)
+                      (Math/pow settings/base-auth-timeout
+                                (- attempts settings/repeated-login-grace))))]
+    (k/insert e/auth_attempts
+              (k/values {:address addr
+                         :attempts attempts
+                         :reset_at reset-at}))))
+(defn passed-auth!
+  "Resets the failed attempts counter."
+  [inet-addr]
+  ; Don't worry mam, the address unique conflict resolution algo
+  ; will replace the old record if it exists.
+  (k/insert e/auth_attempts
+            (k/values {:address (.getHostAddress inet-addr)
+                       :attempts 0
+                       :reset_at 0})))
+
+
 (defn get-user-record
   "Takes a string representing a single address and returns the full record of
   the user holding that mailbox."
@@ -85,7 +145,7 @@
 (defn match-pass
   "Returns true if the supplied password matches the stored hashed password
   for the user with address `address`."
-  [address password db]
+  [address password]
   (let [user-data (get-user-record address)]
       (BCrypt/checkpw password (:hashword user-data))))
 

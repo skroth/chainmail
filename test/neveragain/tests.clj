@@ -7,11 +7,13 @@
            [db :as korma.db])
     [clojure.data.codec.base64 :as b64]
     (neveragain [common :as common]
+                [settings :as settings]
                 [entities :as e]
                 [imap :as imap]
                 [addresses :as addresses]))
   (:import
     (java.lang String)
+    (java.net InetAddress)
     (java.security KeyPair PublicKey PrivateKey)
     (org.bouncycastle.crypto.params KeyParameter)
     (org.bouncycastle.crypto.engines AESFastEngine)
@@ -24,13 +26,17 @@
                                      :subprotocol "sqlite"
                                      :subname "test.db"})]
     (korma.db/default-connection test-db)
-    (korma.db/with-db test-db (f))))
+    (korma.db/with-db test-db (time (f)))))
 
 (defn transact-fixture [f]
   (korma.db/transaction
     (do
       (f)
       (korma.db/rollback))))
+
+(defn run-single [f]
+  (standard-fixture
+    (fn [] (transact-fixture f))))
 
 (use-fixtures :once standard-fixture)
 (use-fixtures :each transact-fixture)
@@ -152,3 +158,28 @@
   (is (= (addresses/c-addr {:box_name "lanny"
                             :hostname "neveraga.in"})
          "lanny@neveraga.in")))
+
+(deftest test-auth-ratelimiting
+  ; Doesn't have to be localhost, just need an inet address.
+  (let [local-host (InetAddress/getLocalHost)]
+    ; Should be able to attempt auth off the bat
+    (is (common/can-authenticate? local-host))
+
+    ; Success shouldn't stop us from trying to auth again (at this level)
+    (common/passed-auth! local-host)
+    (is (common/can-authenticate? local-host))
+
+    ; We should be able to do the grace number of logins and still try one
+    ; more time.
+    (doall (for [_ (range settings/repeated-login-grace)]
+      (common/failed-auth! local-host)))
+    (is (common/can-authenticate? local-host))
+    ; Now we're over the limit, should deny us an authentication attempt
+    (common/failed-auth! local-host)
+    (is (not (common/can-authenticate? local-host)))
+
+    ; And once we pass, the failed counter should be reset.
+    (common/passed-auth! local-host)
+    (is (common/can-authenticate? local-host))))
+
+;(run-single test-auth-ratelimiting)

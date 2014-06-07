@@ -28,16 +28,19 @@
   (belongs-to users {:fk :recipient_id})
   (has-many tags {:fk :message_id}))
 
+(defentity auth_attempts
+  (database korma-db))
+
 ;(insert tags
 ;  (values {:users_id 1
 ;           :message_id 1
 ;           :name "MB-Newsletters"}))
 
-(-> (select* messages)
-    (join tags (= :id :tags.users_id))
-    (modifier "DISTINCT")
-    (where {:recipient_id 1})
-    (where {:tags.name "MB-Newsletters"})
-    (order :recv_date :DESC)
-    (limit 50)
-    (exec))
+;(-> (select* messages)
+;    (join tags (= :id :tags.users_id))
+;    (modifier "DISTINCT")
+;    (where {:recipient_id 1})
+;    (where {:tags.name "MB-Newsletters"})
+;    (order :recv_date :DESC)
+;    (limit 50)
+;    (exec))

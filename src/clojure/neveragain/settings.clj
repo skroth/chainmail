@@ -22,13 +22,24 @@
 
 (def smtp-port 2500)
 (def tls-smtp-port 4650)
+
+;; For passwords. Higher numbers means larger salt means more security means
+;; longer authentication times.
 (def salt-factor 10)
 (def controlled-domains #{"neveraga.in"
                           "lannysport.net"
                           "chainmail.io"})
 
 ;; Number of milliseconds with no activity before we close a smtp session
-(def smtp-session-timeout (* 10 1000))
+(def smtp-session-timeout (* 60 1000))
+
+;; The number of failed login attempts a client can make before we start 
+;; imposing rate limiting
+(def repeated-login-grace 3)
+
+;; The amount of lockout time, in seconds, for the first failed login attempt 
+;;beyond the grace number. Lockout time is base^(failures - grace) seconds.
+(def base-auth-timeout 2)
 
 ;; Make sure aes size is lower than ecc size. We don't use any blocking scheme
 ;; with the public keys so we have to be able to encrypt the aes keys in one block

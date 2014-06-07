@@ -46,6 +46,14 @@ CREATE TABLE messages
   seq_num INTEGER,
   FOREIGN KEY(recipient_id) REFERENCES users(id));
 
+-- Records the number of times a given foreign IP has attempted and failed to 
+-- authenticate as any user, used accross services
+CREATE TABLE auth_attempts 
+( address TEXT NOT NULL,
+  attempts INTEGER DEFAULT 0,
+  reset_at INTEGER NOT NULL, -- Unix time when the timeout expires
+  UNIQUE(address) ON CONFLICT REPLACE);
+
 -- All new messages are recent, insert the proper records in the tags table 
 -- on message creation.
 CREATE TRIGGER add_tags AFTER INSERT ON messages
