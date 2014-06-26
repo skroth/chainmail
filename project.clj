@@ -30,9 +30,11 @@
       :pretty-print true}}]}
   :profiles {:smtp {:main ^:skip-aot neveragain.core}
              :imap {:main ^:skip-aot neveragain.imap}
+             :client {:main ^:skip-aot client.core}
              :uberjar {:aot :all}}
   :aliases {"smtp" ["with-profile" "smtp" "run"]
             "imap" ["with-profile" "imap" "run"]
+            "client" ["with-profile" "client" "run"]
             "webmail" ["ring" "server"]}
   :main ^:skip-aot neveragain.core
   :target-path "target/%s"

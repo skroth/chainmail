@@ -6,7 +6,8 @@
     (neveragain AsyncSocket)
     (java.net InetSocketAddress)
     (java.io IOException)
-    (java.nio.channels ServerSocketChannel)))
+    (java.net Socket)
+    (java.nio.channels ServerSocketChannel SocketChannel)))
 
 (defn read-write!
   "Accepts a connection vector, reads from its reader if possible and pushes 
@@ -48,7 +49,7 @@
           (let [socket (AsyncSocket. newbie)
                 r-chan (chan 10)
                 w-chan (chan 10)]
-            (conn-handler r-chan w-chan socket)
+            (conn-handler r-chan w-chan)
             (recur (conj handled-conns [socket r-chan w-chan])))
           (recur handled-conns)))))
 
@@ -62,6 +63,64 @@
     (.configureBlocking serv-socket true)
     (.bind serv-socket (InetSocketAddress. port) 3)
     (manage-sockets conn-chan handler)
+    (println "SERVING ON PORT: " port)
+    (while true
+      (let [client-socket (.accept serv-socket)]
+        (.configureBlocking client-socket false)
+        (>!! conn-chan client-socket)))))
+
+(defn pass-forever
+  [options]
+  (let [{:keys [client->host host->client port host-addr host-port]}
+        (merge {:client->host (fn [x] (str x "\r\n"))
+                :host->client (fn [x] (str x "\r\n"))
+                :port 4242
+                :host-addr "localhost"
+                :host-port 1337}
+               options)
+        conn-chan (chan 10)
+        serv-socket (ServerSocketChannel/open)]
+
+    (go-loop [conns []]
+      (Thread/sleep 100)
+
+      (let [handled-conns (->> conns
+                               (map read-write!)
+                               (filter (complement nil?))
+                               (doall))
+            ; Then check if we have new sockets to watch.
+            [newbie source] (alts! [conn-chan] :default :noop)]
+        (if-not (= newbie :noop)
+          (let [c-socket (AsyncSocket. newbie)
+                c-r-chan (chan 10)
+                c-w-chan (chan 10)
+                h-socket (-> (InetSocketAddress.  host-addr host-port)
+                             (SocketChannel/open))
+                _ (.configureBlocking h-socket false)
+                h-socket (AsyncSocket. h-socket)
+                h-r-chan (chan 10)
+                h-w-chan (chan 10)]
+
+            (go-loop []
+              (let [line (<! c-r-chan)]
+                (if-not (nil? line)
+                  (do
+                    (>! h-w-chan (host->client line))
+                    (recur)))))
+
+            (go-loop []
+              (let [line (<! h-r-chan)]
+                (if-not (nil? line)
+                  (do
+                    (>! c-w-chan (client->host line))
+                    (recur)))))
+
+            (recur (conj handled-conns [c-socket c-r-chan c-w-chan]
+                                       [h-socket h-r-chan h-w-chan])))
+          (recur handled-conns))))
+
+    (.configureBlocking serv-socket true)
+    (.bind serv-socket (InetSocketAddress. port) 1)
     (println "SERVING ON PORT: " port)
     (while true
       (let [client-socket (.accept serv-socket)]

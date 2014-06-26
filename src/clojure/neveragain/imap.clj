@@ -36,26 +36,26 @@
         (>!! w-chan (str tag \space response "\r\n")))
       new-session)))
 
-(defn wrap-auth-rate-limiter
-  "Takes an IMAP authentication command function and returns that function
-  wrapped in the standard authentication rate limiting logic."
-  [f]
-  (fn [args session]
-    (let [addr (.getInetAddress (:socket conn))]
-      (if-not (can-authenticate? addr)
-        (do
-          (write-out (:out conn)
-                     (format 
-                       (str "500 Hark knave! Desist in thine ceaseless "
-                            "queries, thou shalt be ignored until thine "
-                            "designated hour of: %s")
-                       (i-can-haz-auth-time!?! addr)))
-          envl)
-        (let [new-envl (f msg conn envl)]
-          (if (:authenticated new-envl)
-            (passed-auth! addr)
-            (failed-auth! addr))
-          new-envl)))))
+;(defn wrap-auth-rate-limiter
+;  "Takes an IMAP authentication command function and returns that function
+;  wrapped in the standard authentication rate limiting logic."
+;  [f]
+;  (fn [args session]
+;    (let [addr (.getInetAddress (:socket conn))]
+;      (if-not (can-authenticate? addr)
+;        (do
+;          (write-out (:out conn)
+;                     (format 
+;                       (str "500 Hark knave! Desist in thine ceaseless "
+;                            "queries, thou shalt be ignored until thine "
+;                            "designated hour of: %s")
+;                       (i-can-haz-auth-time!?! addr)))
+;          envl)
+;        (let [new-envl (f msg conn envl)]
+;          (if (:authenticated new-envl)
+;            (passed-auth! addr)
+;            (failed-auth! addr))
+;          new-envl)))))
 
 (defmacro require-state 
   "Wraps a pure verb handler to prevent the handler from being executed if 
