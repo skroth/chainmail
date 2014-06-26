@@ -124,7 +124,7 @@
             nil)
         (nil? msg)
           (do
-            (println "Hark milord, yon plebian douth closeth the connection.")
+            (println "Hark milord, yon plebian doth closeth the connection.")
             nil)
         :else
           (let [response (respond inner-conn msg envl)]
@@ -134,13 +134,29 @@
               :else (recur response inner-conn)))))))
 
 (defn serve-forever [serv-socket thread-count]
-  (let [thread-pool (Executors/newFixedThreadPool thread-count)]
+  (let [thread-pool (Executors/newFixedThreadPool thread-count)
+        connection-counts (atom {})]
     (println (str "Serving on port " (.getLocalPort serv-socket)))
     (while (= 1 1)
       (let [client-socket (.accept serv-socket)
-            conn (make-conn client-socket)]
-        (.setSoTimeout client-socket settings/smtp-session-timeout)
-        (.execute thread-pool (fn [] (handle-conn conn)))))))
+            conn (make-conn client-socket)
+            addr (.getInetAddress client-socket)
+            simu-conns (-> connection-counts 
+                           (swap! (fn [x] 
+                                    (assoc x addr (inc (get x addr 0)))))
+                           (get addr))]
+        (if (> simu-conns settings/smtp-simultaneous-connections)
+          (do
+            (write-out (:out conn) (str "500 Hark knave! Thou harry us with "
+                                        "thine connections! (too many "
+                                        "connections). Thou art vanquished ("
+                                        "dropping connection)."))
+            (.close client-socket)
+            (swap! connection-counts 
+                   (fn [x] (assoc x addr (dec (get x addr))))))
+          (do
+            (.setSoTimeout client-socket settings/smtp-session-timeout)
+            (.execute thread-pool (fn [] (handle-conn conn)))))))))
 
 (defn -main [& args]
   (println settings/banner)
@@ -155,7 +171,7 @@
                          (:cert settings/keyfiles)
                          (:ca settings/keyfiles)]
                         (apply las/ssl-context <>)
-                        (las/server-socket "localhost" 
+                        (las/server-socket "localhost"
                                            settings/tls-smtp-port))]
     (.setNeedClientAuth ssl-server false)
     (serve-forever ssl-server settings/thread-count)

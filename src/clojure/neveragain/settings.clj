@@ -38,8 +38,12 @@
 (def repeated-login-grace 3)
 
 ;; The amount of lockout time, in seconds, for the first failed login attempt 
-;;beyond the grace number. Lockout time is base^(failures - grace) seconds.
+;; beyond the grace number. Lockout time is base^(failures - grace) seconds.
 (def base-auth-timeout 2)
+
+;; The maximum number of live connections a single IP address can have with
+;; the smtp server at one time.
+(def smtp-simultaneous-connections 1)
 
 ;; Make sure aes size is lower than ecc size. We don't use any blocking scheme
 ;; with the public keys so we have to be able to encrypt the aes keys in one block

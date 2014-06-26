@@ -34,7 +34,7 @@
   is available. Sockets will stop being watched when they are closed."
   [new-conns conn-handler]
     (go-loop [conns []]
-      ; Yeild for a second as to not blaze through at 100% CPU usage
+      ; Yeild for a moment as to not blaze through at 100% CPU usage
       (Thread/sleep 100)
 
       ; First do our reads and writes
@@ -48,7 +48,7 @@
           (let [socket (AsyncSocket. newbie)
                 r-chan (chan 10)
                 w-chan (chan 10)]
-            (conn-handler r-chan w-chan)
+            (conn-handler r-chan w-chan socket)
             (recur (conj handled-conns [socket r-chan w-chan])))
           (recur handled-conns)))))
 
@@ -69,7 +69,7 @@
         (>!! conn-chan client-socket)))))
 
 (defn echo-handler
-  [r-chan w-chan]
+  [r-chan w-chan socket]
   (go-loop [read-val (<! r-chan)]
     (>! w-chan (apply str read-val " desu!\r\n"))
     (recur (<! r-chan))))
