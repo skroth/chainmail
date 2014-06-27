@@ -594,7 +594,9 @@
                       (map (fn [[k v]] (str (name k) ": " v)))
                       (string/join "\r\n")))
              :else
-               (throw (Throwable. "Unrecognized field name"))))
+               (throw (Throwable. (format 
+                                    "Unrecognized section name: %s" 
+                                    section)))))
          (string/join "\r\n")
          (transmit-fmt))))
 
@@ -646,6 +648,8 @@
                 (->> (.getBytes wrapped "UTF-8")
                      (alength)
                      (format "RFC822.SIZE %d"))
+              (= field "ENVELOPE")
+                (extract-sections {:section ["HEADER"]} parsed)
               (= field "BODY")
                 (str "BODY " (transmit-fmt wrapped))
               (re-matches #"^BODY.PEEK\[.*\]$" field)
@@ -658,7 +662,10 @@
                   (str field " "
                        (extract-sections fields parsed)))
               :else
-                (throw (Throwable. "Unrecognized field name")))])
+                (throw (Throwable. (format 
+                                    "Unrecognized field name: %s" 
+                                    field))))])
+
          (sort-by first field-sort)
          (map second) ; Remember they're will 2-tuples
          (string/join " ")

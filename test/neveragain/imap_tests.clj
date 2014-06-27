@@ -2,6 +2,7 @@
   (:use [clojure.java.shell :only [sh]])
   (:require
     (clojure [test :refer :all])
+    (clojure [pprint :refer :all])
     (clojure.java [jdbc :as j])
     (korma [core :as k]
            [db :as korma.db])
@@ -114,8 +115,6 @@
     (is (re-matches #"^OK.*" (:response case-four)))
     (is (re-matches #"^NO.*" (:response case-five)))))
 
-;(standard-fixture test-imap-create)
-
 (deftest test-imap-delete
   (let [user (common/get-user-record "lanny@neveraga.in")
         _ (imap/create "\"Newsletters\""
@@ -207,7 +206,12 @@
                                    {:state "selected"
                                     :selected-box "\\Inbox"
                                     :user user
-                                    :subscriptions #{}})]
+                                    :subscriptions #{}})
+        case-four (imap/fetch "1 ALL" 
+                              {:state "selected" 
+                               :selected-box "\\Inbox"
+                               :user user
+                               :subscriptions #{}})]
     (is (= 1 (count (:response case-two))))
     (is (re-matches #"OK.*" (-> case-one :response last)))
     (is (= 2 (count (:response case-one))))
@@ -215,11 +219,22 @@
     ; Forive the ID regex, but we want this to work regardless of TZ.
     (is (re-matches #"^1 FETCH \(UID \d+ FLAGS \((\\Recent \\Inbox)\) INTERNALDATE (Wed|Thu), (31|01) (Dec|Jan) 19[67][90] \d{2}:\d{2}:\d{2} [+-]\d{4}\).*"
                     (-> case-three :response first)))
+    (pprint case-four)
+    (is (re-matches #"OK.*" (-> case-four :response last)))
     (let [[_ size message] (re-matches 
                              #"(?sm)^\d+ FETCH \(UID \d+ BODY \{(\d+)\}(.+)\)$"
                                        (-> case-one :response first))]
       (is (= (+ 2 (Integer/parseInt size)) ; Compensate for the CRLF
              (alength (.getBytes message "UTF-8")))))))
+
+(deftest test-parse-fetch-args
+  (let [[_ c1] (imap/parse-fetch-args "1:* (FLAGS)")
+        [_ c2] (imap/parse-fetch-args "1:* ALL")]
+    (pprint c2)
+    (is (= c1 {:field-name #{"RFC822.SIZE" "FLAGS" "INTERNALDATE" "ENVELOPE"}}))
+    (is (= c1 {:field-name '("FLAGS")}))))
+
+;(test-parse-fetch-args)
 
 (deftest test-uid-fetch
   (let [user (common/get-user-record "lanny@neveraga.in")
