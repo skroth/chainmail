@@ -649,7 +649,8 @@
                      (alength)
                      (format "RFC822.SIZE %d"))
               (= field "ENVELOPE")
-                (extract-sections {:section ["HEADER"]} parsed)
+                (str "ENVELOPE "
+                     (extract-sections {:section ["HEADER"]} parsed))
               (= field "BODY")
                 (str "BODY " (transmit-fmt wrapped))
               (re-matches #"^BODY.PEEK\[.*\]$" field)

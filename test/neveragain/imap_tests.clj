@@ -9,7 +9,6 @@
     (neveragain [common :as common]
                 [entities :as e]
                 [imap :as imap])))
-      
 
 (defn standard-fixture [f]
   (sh "sh" "rebuild_db.sh" "test.db")
@@ -219,7 +218,6 @@
     ; Forive the ID regex, but we want this to work regardless of TZ.
     (is (re-matches #"^1 FETCH \(UID \d+ FLAGS \((\\Recent \\Inbox)\) INTERNALDATE (Wed|Thu), (31|01) (Dec|Jan) 19[67][90] \d{2}:\d{2}:\d{2} [+-]\d{4}\).*"
                     (-> case-three :response first)))
-    (pprint case-four)
     (is (re-matches #"OK.*" (-> case-four :response last)))
     (let [[_ size message] (re-matches 
                              #"(?sm)^\d+ FETCH \(UID \d+ BODY \{(\d+)\}(.+)\)$"
@@ -230,7 +228,6 @@
 (deftest test-parse-fetch-args
   (let [[_ c1] (imap/parse-fetch-args "1:* (FLAGS)")
         [_ c2] (imap/parse-fetch-args "1:* ALL")]
-    (pprint c2)
     (is (= c1 {:field-name #{"RFC822.SIZE" "FLAGS" "INTERNALDATE" "ENVELOPE"}}))
     (is (= c1 {:field-name '("FLAGS")}))))
 
