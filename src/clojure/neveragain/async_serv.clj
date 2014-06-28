@@ -69,11 +69,20 @@
         (.configureBlocking client-socket false)
         (>!! conn-chan client-socket)))))
 
+(defn default-pass-handler
+  [in-chan out-chan comm-atom]
+  (go-loop []
+    (let [line (<! in-chan)]
+      (if-not (nil? line)
+        (do
+          (>! out-chan (str line "\r\n"))
+          (recur))))))
+
 (defn pass-forever
   [options]
   (let [{:keys [client->host host->client port host-addr host-port]}
-        (merge {:client->host (fn [x] (str x "\r\n"))
-                :host->client (fn [x] (str x "\r\n"))
+        (merge {:client->host default-pass-handler
+                :host->client default-pass-handler
                 :port 4242
                 :host-addr "localhost"
                 :host-port 1337}
@@ -99,21 +108,11 @@
                 _ (.configureBlocking h-socket false)
                 h-socket (AsyncSocket. h-socket)
                 h-r-chan (chan 10)
-                h-w-chan (chan 10)]
+                h-w-chan (chan 10)
+                comm-atom (atom {})]
 
-            (go-loop []
-              (let [line (<! c-r-chan)]
-                (if-not (nil? line)
-                  (do
-                    (>! h-w-chan (host->client line))
-                    (recur)))))
-
-            (go-loop []
-              (let [line (<! h-r-chan)]
-                (if-not (nil? line)
-                  (do
-                    (>! c-w-chan (client->host line))
-                    (recur)))))
+            (client->host c-r-chan h-w-chan comm-atom)
+            (host->client h-r-chan c-w-chan comm-atom)
 
             (recur (conj handled-conns [c-socket c-r-chan c-w-chan]
                                        [h-socket h-r-chan h-w-chan])))
