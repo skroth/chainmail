@@ -32,9 +32,16 @@ function InboxModel() {
         newM = [],
         i = 0
 
+      if (!(data.length > 0)) {
+        self.statusText("No messages.")
+        return
+      }
+
       ;(function next(rest) {
         var baseText = 'decrypting message ' + (++i) + ' of ' + data.length
         self.statusText(baseText + ' (elGamal)')
+
+        console.log(rest)
 
         var message = rest.pop(),
           cipherKey = sjcl.codec.base64.toBits(message.aes_key),

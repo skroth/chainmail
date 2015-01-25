@@ -72,10 +72,9 @@
 
 (defn send-mail [request]
   (let [user (:user (:session request))
-      envl {
-        :from (str (:address user) "@" (:hostname user))
-        :to (string/split (:recipients (:params request)) #",")
-        :data (:data (:params request))}]
+        envl {:from (str (:address user) "@" (:hostname user))
+              :to (string/split (:recipients (:params request)) #",")
+              :data (:data (:params request))}]
     (relay-message envl)
     {:status 200
      :body (json/write-str {:status "success"})}))

@@ -299,7 +299,8 @@
           [cipher-text enc-key iv] (encrypt-message message pub-key)]
       ; sqlite's last row id key name doesn't play nice with clojure's syntax
       ; but this'll work
-      (let [message-id (k/insert e/messages (k/values 
+      (let [message-id (k/insert e/messages
+                                 (k/values
                                    {:recipient_id (:id user)
                                     :data (->> cipher-text
                                                (b64/encode)
