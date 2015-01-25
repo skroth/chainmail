@@ -12,8 +12,10 @@
     (java.net ServerSocket InetAddress SocketTimeoutException)
     (java.util.concurrent Executors)
     (java.util Date)
-    (java.io PrintWriter File)
+    (java.io PrintWriter File IOException)
     (java.util Scanner NoSuchElementException)))
+
+(def connection-counts (atom {}))
 
 (defn rewrite-ehlo [v-map ext-list]
   "Returns a verb handler map with an EHLO verb reflecting ext-list"
@@ -97,7 +99,7 @@
        envl)
   ) msg conn envl))
 
-(defn handle-conn [conn]
+(defn handle-conn* [conn]
   ; For the mistified check out the actual spec followed here
   ; [http://tools.ietf.org/html/rfc2821] and this invaluable guide
   ; [http://cr.yp.to/smtp.html]
@@ -133,30 +135,38 @@
               (= response nil) nil
               :else (recur response inner-conn)))))))
 
+(defn handle-conn [conn]
+  (let [client-socket (:socket conn)
+        addr (.getInetAddress client-socket)
+        simu-conns (-> connection-counts
+                           (swap! (fn [x]
+                                    (assoc x addr (inc (get x addr 0)))))
+                           (get addr))]
+    (if (> simu-conns settings/smtp-simultaneous-connections)
+      (do
+        (write-out (:out conn) (str "500 Hark knave! Thou harry us with "
+                                    "thine connections! (too many "
+                                    "connections). Thou art vanquished ("
+                                    "dropping connection)."))
+        (.close client-socket)
+        (swap! connection-counts
+               (fn [x] (assoc x addr (dec (get x addr))))))
+      (do
+        (try
+          (handle-conn* conn)
+          (catch IOException e (fn [] nil))
+          (finally
+            (swap! connection-counts (fn [x]
+                     (assoc x addr (dec (get x addr 0)))))))))))
+
 (defn serve-forever [serv-socket thread-count]
-  (let [thread-pool (Executors/newFixedThreadPool thread-count)
-        connection-counts (atom {})]
+  (let [thread-pool (Executors/newFixedThreadPool thread-count)]
     (println (str "Serving on port " (.getLocalPort serv-socket)))
     (while (= 1 1)
       (let [client-socket (.accept serv-socket)
-            conn (make-conn client-socket)
-            addr (.getInetAddress client-socket)
-            simu-conns (-> connection-counts 
-                           (swap! (fn [x] 
-                                    (assoc x addr (inc (get x addr 0)))))
-                           (get addr))]
-        (if (> simu-conns settings/smtp-simultaneous-connections)
-          (do
-            (write-out (:out conn) (str "500 Hark knave! Thou harry us with "
-                                        "thine connections! (too many "
-                                        "connections). Thou art vanquished ("
-                                        "dropping connection)."))
-            (.close client-socket)
-            (swap! connection-counts 
-                   (fn [x] (assoc x addr (dec (get x addr))))))
-          (do
-            (.setSoTimeout client-socket settings/smtp-session-timeout)
-            (.execute thread-pool (fn [] (handle-conn conn)))))))))
+            conn (make-conn client-socket)]
+        (.setSoTimeout client-socket settings/smtp-session-timeout)
+            (.execute thread-pool (fn [] (handle-conn conn)))))))
 
 (defn -main [& args]
   (println settings/banner)

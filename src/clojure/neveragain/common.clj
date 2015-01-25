@@ -10,21 +10,18 @@
                 [addresses :as addresses]))
   (:import
     (neveragain CustomPublicKey)
-    (java.net ServerSocket InetAddress Socket)
+    (java.net InetAddress Socket)
     (org.bouncycastle.jce.provider BouncyCastleProvider)
     (org.bouncycastle.jce.spec ElGamalParameterSpec ElGamalPublicKeySpec)
     (org.bouncycastle.crypto.modes CCMBlockCipher)
     (org.bouncycastle.crypto.engines AESFastEngine)
     (org.bouncycastle.crypto.params KeyParameter CCMParameters)
-    (java.lang.String)
     (java.util Date)
     (java.security KeyPairGenerator SecureRandom Security)
-    (java.io PrintWriter InputStreamReader BufferedReader IOException)
-    (java.util Hashtable Scanner NoSuchElementException)
+    (java.io PrintWriter IOException)
+    (java.util Hashtable Scanner)
     (javax.crypto Cipher KeyGenerator)
-    (javax.crypto.spec SecretKeySpec IvParameterSpec)
     (javax.naming.directory InitialDirContext)
-    (javax.net.ssl SSLSocketFactory)
     (org.mindrot.jbcrypt BCrypt)))
 
 ;; Mmhmm, I love me some good ole state
@@ -302,7 +299,7 @@
           [cipher-text enc-key iv] (encrypt-message message pub-key)]
       ; sqlite's last row id key name doesn't play nice with clojure's syntax
       ; but this'll work
-      (let [message-id (k/insert (k/values 
+      (let [message-id (k/insert e/messages (k/values 
                                    {:recipient_id (:id user)
                                     :data (->> cipher-text
                                                (b64/encode)
@@ -315,7 +312,7 @@
                                                   (apply str))
                                     :iv (apply str (map char (b64/encode iv)))
                                     :recv_date (-> (System/currentTimeMillis)
-                                                   (quot 1000))}))]
+                                                   (quot 1000))}) )]
         ; Tag creation is taken care of by a sqlite trigger, we hope.
         ; And we return the message id, as promised
         message-id))))
