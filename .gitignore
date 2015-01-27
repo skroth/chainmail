@@ -4,6 +4,7 @@
 /native
 pom.xml
 pom.xml.asc
+*.iml
 *.jar
 *.class
 /.lein-*
@@ -14,3 +15,4 @@ pom.xml.asc
 *.DS_Store
 *.swp
 Session.vim
+.idea*

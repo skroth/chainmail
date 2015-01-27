@@ -155,17 +155,12 @@ function composeModel(preloadData) {
   }
 
   self.send = function(root) {
-    var message = 'Content-Transfer-Encoding: "8bit"\r\n' +
-      'Content-Type: "text/plain; charset=utf-8"\r\n' +
-      'Date: ' + strftime('%a, %d %b %Y %H:%M:%S %Z', new Date()) + '\r\n' +
-      'From: "' + root.me.realname + ' <' + root.me.address + '>"\r\n' +
-      'MIME-Version: "1.0"\r\n' +
-      'Message-ID: "<' + Date.now() + '.' + Math.random().toString().substr(2) +
-        '@' + root.me.address.split('@')[1] + '>"\r\n' +
-      'Subject: "' + self.subject().replace(/[\r\n]/gi, '') + '"\r\n' +
-      'To: "' + self.to() + '"\r\n' +
-      'User-Agent: "Chainmail/WebClient"\r\n' +
-      '\r\n' + transmitEncode(self.body())
+    var message = {
+      from: root.me.address,
+      to: self.to(),
+      subject: self.subject(),
+      body: self.body(),
+    }
 
     $.post('/send', { content: message })
   }
