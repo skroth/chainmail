@@ -159,7 +159,7 @@ function composeModel(preloadData) {
       from: root.me.address,
       to: self.to(),
       subject: self.subject(),
-      body: self.body(),
+      body: transmitEncode(self.body()),
     }
 
     $.post('/send', { content: message })

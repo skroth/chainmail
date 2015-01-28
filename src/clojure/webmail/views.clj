@@ -72,9 +72,20 @@
 
 (defn send-mail [request]
   (let [user (:user (:session request))
+        message (-> request (:params) (:message))
         envl {:from (str (:address user) "@" (:hostname user))
               :to (string/split (:recipients (:params request)) #",")
-              :data (:data (:params request))}]
+              :data (str "Content-Transfer-Encoding: \"8bit\"\r\n"
+                         "Content-Type: \"text/plain; charset=utf-8\"\r\n"
+                         "Date: " (strftime "%a, %d %b %Y %H:%M:%S %Z" (Date.)) "\r\n"
+                         "From: \"" (:realname user) " <" (str (:address user) "@" (:hostname user)) ">\"\r\n"
+                         "MIME-Version: \"1.0\"\r\n"
+                         "Message-ID: \"<" (unix-now) "." (-> (rand) (str) (subs 2))
+                         "@" (:hostname user) ">\"\r\n"
+                         "Subject: \"" (string/replace (:subject message) "\r\n" "") "\"\r\n"
+                         "To: \"" (:to message) "\"\r\n"
+                         "User-Agent: \"Chainmail/WebClient\"\r\n"
+                         "\r\n" (:body message))}]
     (relay-message envl)
     {:status 200
      :body (json/write-str {:status "success"})}))
